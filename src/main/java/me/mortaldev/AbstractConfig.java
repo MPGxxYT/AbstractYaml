@@ -38,6 +38,7 @@ public abstract class AbstractConfig {
     if (valueType.isInstance(value)) {
       configValue.setValue(valueType.cast(value));
     } else {
+      System.out.println("defaulting = " + configValue.getDefaultValue());
       configValue.setValue(configValue.getDefaultValue());
     }
     return configValue;
