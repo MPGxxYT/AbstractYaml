@@ -77,6 +77,14 @@ public abstract class AbstractConfig {
     return "Reloaded " + getName() + EXTENSION;
   }
 
+  public <T> void saveValue(ConfigValue<T> configValue) {
+    saveValue(configValue, true);
+  }
+
+  public <T> void saveValue(ConfigValue<T> configValue, boolean saveToFile) {
+    saveValue(configValue.getId(), configValue.getValue(), saveToFile);
+  }
+
   /**
    * Sets the value at the given path in the config to the given value.
    *
