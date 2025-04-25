@@ -77,6 +77,16 @@ public abstract class AbstractConfig {
     return "Reloaded " + getName() + EXTENSION;
   }
 
+  /**
+   * Saves the configuration to disk.
+   *
+   * <p>This method will use the last loaded configuration
+   * and any changes made to it since then.
+   */
+  public void saveConfig() {
+    getYAML().saveConfig(getConfig(), getName());
+  }
+
   public <T> void saveValue(ConfigValue<T> configValue) {
     saveValue(configValue, true);
   }
@@ -116,7 +126,10 @@ public abstract class AbstractConfig {
     loadData();
   }
   /**
+   * SHOULD ALWAYS BE RAN ON PLUGIN ENABLE
+   *
    * Loads the configuration file from the given name.
+   * Updates any data in memory to the new values in the config file.
    * <p>
    * This method calls {@link #loadConfig(String)} with the name returned by {@link #getName()}.
    */
