@@ -78,7 +78,7 @@ public class YAML {
     return YamlConfiguration.loadConfiguration(file);
   }
 
-  public void saveOtherConfig(File file, FileConfiguration config) {
+  public void saveOtherConfig(FileConfiguration config, File file) {
     try {
       config.save(file);
     } catch (IOException e) {
