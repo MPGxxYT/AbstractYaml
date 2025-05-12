@@ -44,11 +44,11 @@ public class YAML {
     return message;
   }
 
-  public FileConfiguration createNewConfig(String name) {
+  public FileConfiguration createNewConfig(String path, String name) {
     if (!name.contains(".yml")) {
       name = name.concat(".yml");
     }
-    File file = new File(main.getDataFolder(), name);
+    File file = new File(path, name);
     if (file.exists()) {
       return getConfig(name);
     }
