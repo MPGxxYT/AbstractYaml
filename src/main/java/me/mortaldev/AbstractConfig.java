@@ -38,8 +38,11 @@ public abstract class AbstractConfig {
     if (valueType.isInstance(value)) {
       configValue.setValue(valueType.cast(value));
     } else {
-      System.out.println("defaulting = " + configValue.getDefaultValue());
+      getMain()
+          .getLogger()
+          .warning("Config Value for " + configValue.getId() + " is invalid. Setting to default: " + configValue.getDefaultValue());
       configValue.setValue(configValue.getDefaultValue());
+      saveValue(configValue);
     }
     return configValue;
   }
@@ -80,17 +83,27 @@ public abstract class AbstractConfig {
   /**
    * Saves the configuration to disk.
    *
-   * <p>This method will use the last loaded configuration
-   * and any changes made to it since then.
+   * <p>This method will use the last loaded configuration and any changes made to it since then.
    */
   public void saveConfig() {
     getYAML().saveConfig(getConfig(), getName());
   }
 
+  /**
+   * Saves the value of the given {@link ConfigValue} to the configuration file.
+   *
+   * @param configValue the {@link ConfigValue} to save
+   */
   public <T> void saveValue(ConfigValue<T> configValue) {
     saveValue(configValue, true);
   }
 
+  /**
+   * Saves the value of the given {@link ConfigValue} to the configuration file.
+   *
+   * @param configValue the {@link ConfigValue} to save
+   * @param saveToFile whether to save the value to file
+   */
   public <T> void saveValue(ConfigValue<T> configValue, boolean saveToFile) {
     saveValue(configValue.getId(), configValue.getValue(), saveToFile);
   }
@@ -125,13 +138,14 @@ public abstract class AbstractConfig {
     this.config = getYAML().getConfig(configName);
     loadData();
   }
+
   /**
    * SHOULD ALWAYS BE RAN ON PLUGIN ENABLE
    *
-   * Loads the configuration file from the given name.
-   * Updates any data in memory to the new values in the config file.
-   * <p>
-   * This method calls {@link #loadConfig(String)} with the name returned by {@link #getName()}.
+   * <p>Loads the configuration file from the given name. Updates any data in memory to the new
+   * values in the config file.
+   *
+   * <p>This method calls {@link #loadConfig(String)} with the name returned by {@link #getName()}.
    */
   public void load() {
     loadConfig(getName());
