@@ -1,7 +1,10 @@
 package me.mortaldev;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.Map;
 
 public abstract class AbstractConfig {
   private static final String EXTENSION = ".yml";
@@ -32,15 +35,41 @@ public abstract class AbstractConfig {
 
   public AbstractConfig() {}
 
+
+
   public <T> ConfigValue<T> getConfigValue(ConfigValue<T> configValue) {
     Class<T> valueType = configValue.getValueType();
-    Object value = config.get(configValue.getId(), configValue.getDefaultValue());
+    String path = configValue.getId();
+    T defaultValue = configValue.getDefaultValue();
+
+    Object rawValue = config.get(path); // Get the raw value from the config
+
+    // --- NEW: Special handling for Maps from ConfigurationSections ---
+    if (Map.class.isAssignableFrom(valueType) && rawValue instanceof ConfigurationSection section) {
+      // The config has a section, and we expect a map. Convert it.
+      // The getValues(false) method returns a Map<String, Object>, which is what we need.
+      // This is an unchecked but necessary cast that the API will now handle for the user.
+      configValue.setValue((T) section.getValues(false));
+      return configValue;
+    }
+
+    // --- Fallback to original logic for simple types (String, Integer, etc.) ---
+    Object value = config.get(path, defaultValue);
+
     if (valueType.isInstance(value)) {
       configValue.setValue(valueType.cast(value));
     } else {
       getMain()
           .getLogger()
-          .warning("Config Value for " + configValue.getId() + " is invalid. Setting to default: " + configValue.getDefaultValue());
+          .warning(
+              "Config Value for '"
+                  + path
+                  + "' is invalid. Found type "
+                  + (value != null ? value.getClass().getSimpleName() : "null")
+                  + " but expected "
+                  + valueType.getSimpleName()
+                  + ". Setting to default: "
+                  + configValue.getDefaultValue());
       configValue.setValue(configValue.getDefaultValue());
       saveValue(configValue);
     }

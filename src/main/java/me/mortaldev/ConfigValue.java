@@ -10,11 +10,18 @@ public class ConfigValue<T> {
     this.id = id;
     this.value = value;
     this.defaultValue = defaultValue;
+
+    // IMPROVEMENT: Determine the type from the value, falling back to the default value.
     if (value != null) {
       this.valueType = (Class<T>) value.getClass();
+    } else if (defaultValue != null) {
+      this.valueType = (Class<T>) defaultValue.getClass();
     } else {
-      this.valueType = null;
-      System.out.println("Error casting value to class.");
+      // This is an unrecoverable state for the generic helper.
+      throw new IllegalArgumentException(
+          "Cannot determine type for ConfigValue '"
+              + id
+              + "' because both the initial and default values are null.");
     }
   }
 
