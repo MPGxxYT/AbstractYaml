@@ -5,10 +5,21 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Abstract base class for configuration management with caching support.
+ *
+ * <p>This class provides a framework for loading, saving, and accessing configuration values
+ * with built-in caching to reduce disk I/O operations.
+ */
 public abstract class AbstractConfig {
   private static final String EXTENSION = ".yml";
   private FileConfiguration config;
+
+  // Cache for ConfigValue objects to avoid repeated disk reads
+  private final Map<String, Object> valueCache = new ConcurrentHashMap<>();
+  private boolean cacheEnabled = true;
 
   /**
    * Logs a message to the console.
@@ -31,25 +42,80 @@ public abstract class AbstractConfig {
    */
   public abstract JavaPlugin getMain();
 
+  /**
+   * Called after the configuration is loaded to initialize config values.
+   * Implementations should load their ConfigValue fields here.
+   */
   public abstract void loadData();
 
   public AbstractConfig() {}
 
+  /**
+   * Enables or disables caching for this configuration.
+   *
+   * @param enabled true to enable caching, false to disable
+   */
+  public void setCacheEnabled(boolean enabled) {
+    this.cacheEnabled = enabled;
+    if (!enabled) {
+      clearCache();
+    }
+  }
 
+  /**
+   * Checks if caching is enabled for this configuration.
+   *
+   * @return true if caching is enabled
+   */
+  public boolean isCacheEnabled() {
+    return cacheEnabled;
+  }
 
+  /**
+   * Clears the value cache, forcing the next access to read from disk.
+   */
+  public void clearCache() {
+    valueCache.clear();
+  }
+
+  /**
+   * Clears a specific value from the cache.
+   *
+   * @param path the configuration path to clear from cache
+   */
+  public void clearCacheValue(String path) {
+    valueCache.remove(path);
+  }
+
+  /**
+   * Retrieves and populates a ConfigValue from the configuration.
+   *
+   * @param configValue the ConfigValue to populate
+   * @return the populated ConfigValue
+   * @param <T> the type of the value
+   */
   public <T> ConfigValue<T> getConfigValue(ConfigValue<T> configValue) {
     Class<T> valueType = configValue.getValueType();
     String path = configValue.getId();
     T defaultValue = configValue.getDefaultValue();
 
+    // Check cache first if enabled
+    if (cacheEnabled && valueCache.containsKey(path)) {
+      T cachedValue = (T) valueCache.get(path);
+      configValue.setValue(cachedValue);
+      return configValue;
+    }
+
     Object rawValue = config.get(path); // Get the raw value from the config
 
-    // --- NEW: Special handling for Maps from ConfigurationSections ---
+    // --- Special handling for Maps from ConfigurationSections ---
     if (Map.class.isAssignableFrom(valueType) && rawValue instanceof ConfigurationSection section) {
       // The config has a section, and we expect a map. Convert it.
-      // The getValues(false) method returns a Map<String, Object>, which is what we need.
-      // This is an unchecked but necessary cast that the API will now handle for the user.
-      configValue.setValue((T) section.getValues(false));
+      T mapValue = (T) section.getValues(false);
+      configValue.setValue(mapValue);
+      if (cacheEnabled) {
+        valueCache.put(path, mapValue);
+      }
       return configValue;
     }
 
@@ -57,7 +123,31 @@ public abstract class AbstractConfig {
     Object value = config.get(path, defaultValue);
 
     if (valueType.isInstance(value)) {
-      configValue.setValue(valueType.cast(value));
+      T typedValue = valueType.cast(value);
+      configValue.setValue(typedValue);
+
+      // Validate if a validator is set
+      ConfigValidator<T> validator = configValue.getValidator();
+      if (validator != null) {
+        ConfigValidator.ValidationResult result = validator.validate(typedValue);
+        if (!result.isValid()) {
+          getMain()
+              .getLogger()
+              .warning(
+                  "Config Value for '"
+                      + path
+                      + "' failed validation: "
+                      + result.getErrorMessage()
+                      + ". Setting to default: "
+                      + defaultValue);
+          configValue.setValue(defaultValue);
+          saveValue(configValue);
+        }
+      }
+
+      if (cacheEnabled) {
+        valueCache.put(path, typedValue);
+      }
     } else {
       getMain()
           .getLogger()
@@ -76,6 +166,13 @@ public abstract class AbstractConfig {
     return configValue;
   }
 
+  /**
+   * Gets the YAML utility instance with the main plugin set.
+   *
+   * @return the YAML instance
+   * @deprecated The YAML singleton pattern is deprecated. Consider using instance methods.
+   */
+  @Deprecated
   public YAML getYAML() {
     YAML instance = YAML.getInstance();
     instance.setMain(getMain());
@@ -83,11 +180,11 @@ public abstract class AbstractConfig {
   }
 
   public String failedToLoad(String configName, String configValue) {
-    return getYAML().failedToLoad(configName, configValue);
+    return YAML.getInstance().failedToLoad(getMain(), configName, configValue);
   }
 
   public String failedToLoad(String configName, String configValue, String failReason) {
-    return getYAML().failedToLoad(configName, configValue, failReason);
+    return YAML.getInstance().failedToLoad(getMain(), configName, configValue, failReason);
   }
 
   /**
@@ -100,11 +197,12 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Reloads the configuration file.
+   * Reloads the configuration file and clears the cache.
    *
    * @return a message indicating that the file was reloaded
    */
   public String reload() {
+    clearCache();
     load();
     return "Reloaded " + getName() + EXTENSION;
   }
@@ -115,7 +213,7 @@ public abstract class AbstractConfig {
    * <p>This method will use the last loaded configuration and any changes made to it since then.
    */
   public void saveConfig() {
-    getYAML().saveConfig(getConfig(), getName());
+    YAML.getInstance().saveConfig(getMain(), getConfig(), getName());
   }
 
   /**
@@ -134,6 +232,16 @@ public abstract class AbstractConfig {
    * @param saveToFile whether to save the value to file
    */
   public <T> void saveValue(ConfigValue<T> configValue, boolean saveToFile) {
+    // Validate before saving if validator is set
+    ConfigValidator<T> validator = configValue.getValidator();
+    if (validator != null) {
+      ConfigValidator.ValidationResult result = validator.validate(configValue.getValue());
+      if (!result.isValid()) {
+        throw new IllegalArgumentException(
+            "Cannot save invalid value for '" + configValue.getId() + "': " + result.getErrorMessage());
+      }
+    }
+
     saveValue(configValue.getId(), configValue.getValue(), saveToFile);
   }
 
@@ -148,8 +256,14 @@ public abstract class AbstractConfig {
    */
   public void saveValue(String path, Object value, boolean saveToFile) {
     getConfig().set(path, value);
+
+    // Update cache
+    if (cacheEnabled) {
+      valueCache.put(path, value);
+    }
+
     if (saveToFile) {
-      getYAML().saveConfig(getConfig(), getName());
+      YAML.getInstance().saveConfig(getMain(), getConfig(), getName());
     }
   }
 
@@ -164,7 +278,8 @@ public abstract class AbstractConfig {
   }
 
   private void loadConfig(String configName) {
-    this.config = getYAML().getConfig(configName);
+    this.config = YAML.getInstance().getConfig(getMain(), configName);
+    clearCache(); // Clear cache when loading new config
     loadData();
   }
 
@@ -179,4 +294,6 @@ public abstract class AbstractConfig {
   public void load() {
     loadConfig(getName());
   }
+
+
 }
