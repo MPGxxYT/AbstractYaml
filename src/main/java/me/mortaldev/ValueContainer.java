@@ -45,6 +45,7 @@ package me.mortaldev;
 public abstract class ValueContainer {
     protected final AbstractConfig config;
     protected final String pathPrefix;
+    private String headerComment;
 
     /**
      * Creates a new ValueContainer.
@@ -97,6 +98,41 @@ public abstract class ValueContainer {
     }
 
     /**
+     * Helper method to load a config value with a comment.
+     *
+     * @param path the config path relative to this container's prefix
+     * @param type the class type of the value
+     * @param defaultValue the default value
+     * @param comment the inline comment for this value
+     * @param <T> the type of the value
+     * @return the loaded ConfigValue
+     */
+    protected <T> ConfigValue<T> loadValue(String path, Class<T> type, T defaultValue, String comment) {
+        ConfigValue<T> configValue = new ConfigValue<>(path, type, defaultValue)
+            .setComment(comment);
+        return getConfigValue(configValue);
+    }
+
+    /**
+     * Helper method to load a config value with both a validator and a comment.
+     *
+     * @param path the config path relative to this container's prefix
+     * @param type the class type of the value
+     * @param defaultValue the default value
+     * @param validator the validator to apply to this value
+     * @param comment the inline comment for this value
+     * @param <T> the type of the value
+     * @return the loaded ConfigValue
+     */
+    protected <T> ConfigValue<T> loadValue(String path, Class<T> type, T defaultValue,
+                                            ConfigValidator<T> validator, String comment) {
+        ConfigValue<T> configValue = new ConfigValue<>(path, type, defaultValue)
+            .setValidator(validator)
+            .setComment(comment);
+        return getConfigValue(configValue);
+    }
+
+    /**
      * Gets a config value with the path prefix automatically applied.
      *
      * @param configValue the ConfigValue to load
@@ -117,6 +153,9 @@ public abstract class ValueContainer {
         );
         if (configValue.getValidator() != null) {
             prefixedValue.setValidator(configValue.getValidator());
+        }
+        if (configValue.getComment() != null) {
+            prefixedValue.setComment(configValue.getComment());
         }
 
         // Load from parent config
@@ -140,5 +179,24 @@ public abstract class ValueContainer {
      */
     public String getPathPrefix() {
         return pathPrefix;
+    }
+
+    /**
+     * Sets a header comment for this container section.
+     * The header will appear above the container's section in the YAML file.
+     *
+     * @param headerComment the header comment
+     */
+    protected void setHeaderComment(String headerComment) {
+        this.headerComment = headerComment;
+    }
+
+    /**
+     * Gets the header comment for this container.
+     *
+     * @return the header comment, or null if none is set
+     */
+    public String getHeaderComment() {
+        return headerComment;
     }
 }

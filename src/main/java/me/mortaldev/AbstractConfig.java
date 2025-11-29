@@ -4,13 +4,15 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,6 +28,11 @@ public abstract class AbstractConfig {
   // Cache for ConfigValue objects to avoid repeated disk reads
   private final Map<String, Object> valueCache = new ConcurrentHashMap<>();
   private boolean cacheEnabled = true;
+
+  // Track all ConfigValues for auto-generation
+  private final Map<String, ConfigValue<?>> trackedValues = new LinkedHashMap<>();
+  private final Map<String, ValueContainer> trackedContainers = new LinkedHashMap<>();
+  private String fileHeader;
 
   /**
    * Logs a message to the console.
@@ -104,6 +111,9 @@ public abstract class AbstractConfig {
     Class<T> valueType = configValue.getValueType();
     String path = configValue.getId();
     T defaultValue = configValue.getDefaultValue();
+
+    // Track this value for auto-generation
+    trackedValues.put(path, configValue);
 
     // Check cache first if enabled
     if (cacheEnabled && valueCache.containsKey(path)) {
@@ -284,9 +294,23 @@ public abstract class AbstractConfig {
   }
 
   private void loadConfig(String configName) {
+    File configFile = new File(getMain().getDataFolder(), configName + EXTENSION);
+    boolean shouldGenerate = !configFile.exists();
+
     this.config = YAML.getInstance().getConfig(getMain(), configName);
     clearCache(); // Clear cache when loading new config
+
+    // Clear tracked values before loading
+    trackedValues.clear();
+    trackedContainers.clear();
+
     loadData();
+
+    // Auto-generate config file if it didn't exist before OR if it exists but is essentially empty
+    // Check if config has no keys (meaning it was just created or is empty)
+    if (shouldGenerate || config.getKeys(true).isEmpty()) {
+      generateConfigFile(configFile);
+    }
   }
 
   /**
@@ -362,6 +386,9 @@ public abstract class AbstractConfig {
           container.load();
           field.set(this, container);
 
+          // Track container for auto-generation
+          trackedContainers.put(pathPrefix, container);
+
         } catch (Exception e) {
           getMain().getLogger().severe(
               "Failed to load container '" + field.getName() + "' at path '" + pathPrefix + "': " + e.getMessage()
@@ -388,6 +415,112 @@ public abstract class AbstractConfig {
   protected <T extends ValueContainer> T loadContainer(T container) {
     container.load();
     return container;
+  }
+
+  /**
+   * Sets a file header comment that will appear at the top of the generated config file.
+   * Call this in your config's constructor or loadData() method.
+   *
+   * @param fileHeader the multi-line header comment (each line will be prefixed with #)
+   */
+  protected void setFileHeader(String fileHeader) {
+    this.fileHeader = fileHeader;
+  }
+
+  /**
+   * Gets the file header for this config.
+   *
+   * @return the file header, or null if none is set
+   */
+  public String getFileHeader() {
+    return fileHeader;
+  }
+
+  /**
+   * Manually regenerates the config file with current values and comments.
+   * This will overwrite the existing file.
+   */
+  public void regenerateConfigFile() {
+    File configFile = new File(getMain().getDataFolder(), getName() + EXTENSION);
+    generateConfigFile(configFile);
+  }
+
+  /**
+   * Generates a config file with all tracked values and their comments.
+   *
+   * @param configFile the file to write to
+   */
+  private void generateConfigFile(File configFile) {
+    try {
+      List<YamlWriter.YamlEntry> entries = new ArrayList<>();
+
+      // Group values by container
+      Map<String, List<ConfigValue<?>>> valuesByContainer = new LinkedHashMap<>();
+
+      for (ConfigValue<?> value : trackedValues.values()) {
+        String containerKey = getContainerKey(value.getId());
+        valuesByContainer.computeIfAbsent(containerKey, k -> new ArrayList<>()).add(value);
+      }
+
+      // Create entries with header comments from containers
+      for (Map.Entry<String, List<ConfigValue<?>>> entry : valuesByContainer.entrySet()) {
+        String containerKey = entry.getKey();
+        List<ConfigValue<?>> values = entry.getValue();
+
+        // Get header comment from container if available
+        String headerComment = null;
+        ValueContainer container = trackedContainers.get(containerKey);
+        if (container != null) {
+          headerComment = container.getHeaderComment();
+        }
+
+        // Add first value with header comment
+        if (!values.isEmpty()) {
+          ConfigValue<?> firstValue = values.get(0);
+          entries.add(new YamlWriter.YamlEntry(
+              firstValue.getId(),
+              firstValue.getDefaultValue(),
+              firstValue.getComment(),
+              headerComment
+          ));
+
+          // Add remaining values without header comment
+          for (int i = 1; i < values.size(); i++) {
+            ConfigValue<?> value = values.get(i);
+            entries.add(new YamlWriter.YamlEntry(
+                value.getId(),
+                value.getDefaultValue(),
+                value.getComment(),
+                null
+            ));
+          }
+        }
+      }
+
+      // Write to file with optional file header
+      YamlWriter.writeYaml(configFile, entries, fileHeader);
+
+      // Reload the config to pick up the generated values
+      this.config = YAML.getInstance().getConfig(getMain(), getName());
+
+      getMain().getLogger().info("Generated config file: " + configFile.getName());
+
+    } catch (IOException e) {
+      getMain().getLogger().severe("Failed to generate config file: " + configFile.getName());
+      e.printStackTrace();
+    }
+  }
+
+  /**
+   * Gets the container key from a config path.
+   * For example, "game.length" returns "game", "simple" returns "".
+   */
+  private String getContainerKey(String path) {
+    int dotIndex = path.indexOf('.');
+    if (dotIndex == -1) {
+      return "";
+    }
+    return path.substring(0, dotIndex);
   }
 
 }

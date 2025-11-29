@@ -14,6 +14,7 @@ public class ConfigValue<T> {
   private T defaultValue;
   private final Class<T> valueType;
   private ConfigValidator<T> validator;
+  private String comment;
 
   /**
    * Creates a new ConfigValue with explicit type information.
@@ -143,6 +144,26 @@ public class ConfigValue<T> {
    */
   public boolean isValid() {
     return validate().isValid();
+  }
+
+  /**
+   * Sets an inline comment for this config value.
+   *
+   * @param comment the comment to display inline with the value
+   * @return this ConfigValue for method chaining
+   */
+  public ConfigValue<T> setComment(String comment) {
+    this.comment = comment;
+    return this;
+  }
+
+  /**
+   * Gets the inline comment for this config value.
+   *
+   * @return the comment, or null if none is set
+   */
+  public String getComment() {
+    return comment;
   }
 
   @Override
