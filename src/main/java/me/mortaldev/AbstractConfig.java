@@ -31,7 +31,7 @@ public abstract class AbstractConfig {
 
   // Track all ConfigValues for auto-generation
   private final Map<String, ConfigValue<?>> trackedValues = new LinkedHashMap<>();
-  private final Map<String, ValueContainer> trackedContainers = new LinkedHashMap<>();
+  private final Map<String, ConfigValueContainer> trackedContainers = new LinkedHashMap<>();
   private String fileHeader;
 
   /**
@@ -378,7 +378,7 @@ public abstract class AbstractConfig {
           Constructor<?> constructor = containerClass.getConstructor(
               AbstractConfig.class, String.class
           );
-          ValueContainer container = (ValueContainer) constructor.newInstance(
+          ConfigValueContainer container = (ConfigValueContainer) constructor.newInstance(
               this, pathPrefix
           );
 
@@ -412,7 +412,7 @@ public abstract class AbstractConfig {
    * @param <T> the type of the container
    * @return the loaded container
    */
-  protected <T extends ValueContainer> T loadContainer(T container) {
+  protected <T extends ConfigValueContainer> T loadContainer(T container) {
     container.load();
     return container;
   }
@@ -469,7 +469,7 @@ public abstract class AbstractConfig {
 
         // Get header comment from container if available
         String headerComment = null;
-        ValueContainer container = trackedContainers.get(containerKey);
+        ConfigValueContainer container = trackedContainers.get(containerKey);
         if (container != null) {
           headerComment = container.getHeaderComment();
         }

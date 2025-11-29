@@ -42,7 +42,7 @@ package me.mortaldev;
  * }
  * }</pre>
  */
-public abstract class ValueContainer {
+public abstract class ConfigValueContainer {
     protected final AbstractConfig config;
     protected final String pathPrefix;
     private String headerComment;
@@ -53,7 +53,7 @@ public abstract class ValueContainer {
      * @param config the parent configuration
      * @param pathPrefix the path prefix for all values in this container (e.g., "debug", "messages")
      */
-    protected ValueContainer(AbstractConfig config, String pathPrefix) {
+    protected ConfigValueContainer(AbstractConfig config, String pathPrefix) {
         this.config = config;
         this.pathPrefix = pathPrefix;
     }
