@@ -11,11 +11,25 @@ import org.bukkit.plugin.java.JavaPlugin;
  *   <li>Validation usage</li>
  *   <li>Caching benefits</li>
  *   <li>Thread-safe singleton pattern</li>
+ *   <li>Recommended plugin reference pattern</li>
  * </ul>
+ *
+ * <p>Example usage in your plugin:
+ * <pre>{@code
+ * @Override
+ * public void onEnable() {
+ *     ExampleConfig config = ExampleConfig.getInstance();
+ *     config.setPlugin(this);  // Set plugin reference
+ *     config.load();           // Load from disk
+ *
+ *     getLogger().info("Max players: " + config.getMaxPlayers());
+ * }
+ * }</pre>
  */
 public class ExampleConfig extends AbstractConfig {
+  private JavaPlugin plugin;
 
-  // === ConfigValue declarations with explicit types ===
+  // === ConfigValue declarations with explicit types and validation ===
 
   private ConfigValue<Integer> maxPlayers =
       new ConfigValue<>("max-players", Integer.class, 100)
@@ -46,10 +60,28 @@ public class ExampleConfig extends AbstractConfig {
 
   private ExampleConfig() {}
 
+  // === Plugin reference (recommended pattern) ===
+
+  /**
+   * Sets the JavaPlugin instance for this config.
+   * Must be called before load().
+   *
+   * @param plugin the plugin instance
+   */
+  public void setPlugin(JavaPlugin plugin) {
+    this.plugin = plugin;
+  }
+
+  @Override
+  public JavaPlugin getMain() {
+    return plugin;
+  }
+
   @Override
   public void log(String message) {
-    // You can implement custom logging here if needed
-    // Or leave empty for silent operation
+    if (plugin != null) {
+      plugin.getLogger().info("[Config] " + message);
+    }
   }
 
   @Override
@@ -58,65 +90,105 @@ public class ExampleConfig extends AbstractConfig {
   }
 
   @Override
-  public JavaPlugin getMain() {
-    // TODO: Return your plugin instance here
-    // Common approaches:
-    // 1. Store in a field and set it via a setter
-    // 2. Get from Bukkit.getPluginManager().getPlugin("YourPluginName")
-    // 3. Pass via constructor (breaks singleton pattern)
-    return null; // Replace with your implementation
-  }
-
-  @Override
   public void loadData() {
-    // Load all config values - caching will prevent repeated disk reads
+    // Load all config values - caching prevents repeated disk reads
     maxPlayers = getConfigValue(maxPlayers);
     serverName = getConfigValue(serverName);
     coinMultiplier = getConfigValue(coinMultiplier);
     debugMode = getConfigValue(debugMode);
 
-    // Log validation failures
+    // Log validation failures (optional)
     if (!maxPlayers.isValid()) {
       log("Warning: maxPlayers failed validation: " + maxPlayers.validate().getErrorMessage());
     }
   }
 
-  // === Getters with cached values ===
+  // === Getters (values are cached automatically) ===
 
+  /**
+   * Gets the maximum number of players.
+   * Value is cached after first load.
+   *
+   * @return max players (1-1000)
+   */
   public int getMaxPlayers() {
     return maxPlayers.getValue();
   }
 
+  /**
+   * Gets the server name.
+   * Value is cached after first load.
+   *
+   * @return server name (max 32 characters)
+   */
   public String getServerName() {
     return serverName.getValue();
   }
 
+  /**
+   * Gets the coin multiplier for economy.
+   * Value is cached after first load.
+   *
+   * @return coin multiplier (minimum 0.1)
+   */
   public double getCoinMultiplier() {
     return coinMultiplier.getValue();
   }
 
+  /**
+   * Gets whether debug mode is enabled.
+   * Value is cached after first load.
+   *
+   * @return true if debug mode is on
+   */
   public boolean isDebugMode() {
     return debugMode.getValue();
   }
 
-  // === Setters that update both memory and disk ===
+  // === Setters (update memory and save to disk with validation) ===
 
+  /**
+   * Sets the maximum number of players.
+   * Validates and saves to disk automatically.
+   *
+   * @param maxPlayers new max players (1-1000)
+   * @throws IllegalArgumentException if validation fails
+   */
   public void setMaxPlayers(int maxPlayers) {
-    // Validation happens automatically in saveValue
     this.maxPlayers.setValue(maxPlayers);
-    saveValue(this.maxPlayers);
+    saveValue(this.maxPlayers); // Validates before saving
   }
 
+  /**
+   * Sets the server name.
+   * Validates and saves to disk automatically.
+   *
+   * @param serverName new server name (max 32 characters, not empty)
+   * @throws IllegalArgumentException if validation fails
+   */
   public void setServerName(String serverName) {
     this.serverName.setValue(serverName);
     saveValue(this.serverName);
   }
 
+  /**
+   * Sets the coin multiplier.
+   * Validates and saves to disk automatically.
+   *
+   * @param multiplier new multiplier (minimum 0.1)
+   * @throws IllegalArgumentException if validation fails
+   */
   public void setCoinMultiplier(double multiplier) {
     this.coinMultiplier.setValue(multiplier);
     saveValue(this.coinMultiplier);
   }
 
+  /**
+   * Sets debug mode.
+   * Saves to disk automatically.
+   *
+   * @param debugMode new debug mode state
+   */
   public void setDebugMode(boolean debugMode) {
     this.debugMode.setValue(debugMode);
     saveValue(this.debugMode);
