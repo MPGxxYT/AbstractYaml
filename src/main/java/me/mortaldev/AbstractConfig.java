@@ -4,6 +4,12 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -295,5 +301,93 @@ public abstract class AbstractConfig {
     loadConfig(getName());
   }
 
+  /**
+   * Annotation for marking fields as config containers.
+   * Containers annotated with this will be automatically discovered and loaded by
+   * {@link #loadAllContainers()}.
+   *
+   * <p>Example usage:
+   * <pre>{@code
+   * @ConfigContainer("debug")
+   * private DebugContainer debug;
+   *
+   * @ConfigContainer("messages")
+   * private MessagesContainer messages;
+   * }</pre>
+   */
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.FIELD)
+  protected @interface ConfigContainer {
+    /**
+     * The path prefix for this container in the YAML file.
+     * For example, "debug" will prefix all values in the container with "debug."
+     *
+     * @return the path prefix
+     */
+    String value();
+  }
+
+  /**
+   * Automatically discovers and loads all fields annotated with {@link ConfigContainer}.
+   *
+   * <p>This method uses reflection to find all fields with the @ConfigContainer annotation,
+   * instantiates them, and calls their load() method.
+   *
+   * <p>Call this in your {@link #loadData()} implementation:
+   * <pre>{@code
+   * @Override
+   * public void loadData() {
+   *     loadAllContainers();
+   * }
+   * }</pre>
+   */
+  protected void loadAllContainers() {
+    for (Field field : this.getClass().getDeclaredFields()) {
+      if (field.isAnnotationPresent(ConfigContainer.class)) {
+        field.setAccessible(true);
+        ConfigContainer annotation = field.getAnnotation(ConfigContainer.class);
+        String pathPrefix = annotation.value();
+
+        try {
+          // Instantiate the container
+          Class<?> containerClass = field.getType();
+          Constructor<?> constructor = containerClass.getConstructor(
+              AbstractConfig.class, String.class
+          );
+          ValueContainer container = (ValueContainer) constructor.newInstance(
+              this, pathPrefix
+          );
+
+          // Load and assign
+          container.load();
+          field.set(this, container);
+
+        } catch (Exception e) {
+          getMain().getLogger().severe(
+              "Failed to load container '" + field.getName() + "' at path '" + pathPrefix + "': " + e.getMessage()
+          );
+          e.printStackTrace();
+        }
+      }
+    }
+  }
+
+  /**
+   * Helper method to manually load a container.
+   * This is an alternative to using {@link ConfigContainer} annotation and {@link #loadAllContainers()}.
+   *
+   * <p>Usage:
+   * <pre>{@code
+   * debug = loadContainer(new DebugContainer(this, "debug"));
+   * }</pre>
+   *
+   * @param container the container to load
+   * @param <T> the type of the container
+   * @return the loaded container
+   */
+  protected <T extends ValueContainer> T loadContainer(T container) {
+    container.load();
+    return container;
+  }
 
 }

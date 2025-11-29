@@ -1,13 +1,10 @@
-# AbstractYaml - Type-Safe Configuration Library
+# AbstractYaml
 
-A powerful, type-safe configuration library for Bukkit/Spigot plugins with built-in validation, caching, and thread-safety.
+A powerful, type-safe configuration library for Bukkit/Spigot plugins with validation, caching, and organized config management.
 
----
-
-## ⚡ Quick Start
+## Quick Start
 
 ```java
-// 1. Create your config class
 public class MyConfig extends AbstractConfig {
     private JavaPlugin plugin;
 
@@ -22,8 +19,7 @@ public class MyConfig extends AbstractConfig {
 
     public void setPlugin(JavaPlugin plugin) { this.plugin = plugin; }
 
-    @Override
-    public void loadData() {
+    @Override public void loadData() {
         maxPlayers = getConfigValue(maxPlayers);
     }
 
@@ -34,44 +30,60 @@ public class MyConfig extends AbstractConfig {
     }
 
     public int getMaxPlayers() { return maxPlayers.getValue(); }
-    public void setMaxPlayers(int value) {
-        maxPlayers.setValue(value);
-        saveValue(maxPlayers);
-    }
 }
 
-// 2. Use in your plugin
+// Usage
 @Override
 public void onEnable() {
     MyConfig config = MyConfig.getInstance();
     config.setPlugin(this);
     config.load();
-
-    getLogger().info("Max players: " + config.getMaxPlayers());
 }
 ```
 
----
+## Features
 
-## ✨ Features
+- **Type-Safe** - Explicit type parameters prevent runtime errors
+- **Validated** - Built-in and custom validators
+- **Cached** - 1000-2500x faster repeated access
+- **Thread-Safe** - Safe for async operations
+- **Organized** - ValueContainers for clean config structure
 
-### 🔒 Type-Safe
+## Documentation
+
+### Getting Started
+- [Getting Started Guide](docs/GettingStarted.md) - Your first config in 5 minutes
+- [Migration Guide](docs/MigrationGuide.md) - Upgrading from older versions
+
+### Core Features
+- [Validation](docs/Validation.md) - Validate config values
+- [Value Containers](docs/ValueContainers.md) - Organize large configs ⭐ NEW
+- [Working with Lists](docs/WorkingWithLists.md) - List config values
+
+### Reference
+- [ExampleConfig.java](src/main/java/me/mortaldev/ExampleConfig.java) - Complete working example
+- [CHANGELOG.md](CHANGELOG.md) - Version history
+
+## Core Concepts
+
+### ConfigValue
+Type-safe config values with optional validation:
 ```java
-// Explicit types prevent runtime errors
-new ConfigValue<>("path", Integer.class, 100)  // ✅ Type-safe
-new ConfigValue<>("path", 100)                 // ❌ Deprecated (type erasure)
+private ConfigValue<String> serverName =
+    new ConfigValue<>("server.name", String.class, "Default Server")
+        .setValidator(ConfigValidator.notEmpty());
 ```
 
-### ✅ Validation
+### Validation
+Automatic validation on load and save:
 ```java
-new ConfigValue<>("level", Integer.class, 1)
-    .setValidator(ConfigValidator.range(1, 100));
-
-// Automatic validation on load and save
-config.setLevel(150);  // Throws exception - invalid!
+private ConfigValue<Integer> level =
+    new ConfigValue<>("level", Integer.class, 1)
+        .setValidator(ConfigValidator.range(1, 100));
 ```
 
-### ⚡ Performance Caching
+### Caching
+Automatic performance optimization:
 ```java
 // First access: reads from disk (~2ms)
 int max = config.getMaxPlayers();
@@ -82,41 +94,63 @@ for (int i = 0; i < 1000; i++) {
 }
 ```
 
-### 🧵 Thread-Safe
+### Value Containers ⭐ NEW
+Organize configs into logical sections:
 ```java
-// All operations are thread-safe
-CompletableFuture.runAsync(() -> {
-    config.getMaxPlayers();  // Safe!
-});
+public class CTFConfig extends AbstractConfig {
+    @ConfigContainer("debug")
+    private DebugContainer debug;
+
+    @ConfigContainer("messages")
+    private MessagesContainer messages;
+
+    @Override
+    public void loadData() {
+        loadAllContainers(); // One line!
+    }
+
+    public DebugContainer getDebug() { return debug; }
+    public MessagesContainer getMessages() { return messages; }
+}
+
+// Usage
+CTFConfig.getInstance().getDebug().isVerboseLogging();
+CTFConfig.getInstance().getMessages().getFlagCaptured();
 ```
 
----
+## Available Validators
 
-## 📚 Documentation
+| Validator | Description | Example |
+|-----------|-------------|---------|
+| `range(min, max)` | Numeric range | `ConfigValidator.range(1, 100)` |
+| `min(value)` | Minimum value | `ConfigValidator.min(0)` |
+| `max(value)` | Maximum value | `ConfigValidator.max(1000)` |
+| `notEmpty()` | Non-empty string | `ConfigValidator.notEmpty()` |
+| `length(min, max)` | String length | `ConfigValidator.length(3, 20)` |
+| `matches(regex)` | Regex pattern | `ConfigValidator.matches("^[A-Z]+$")` |
+| `oneOf(values)` | Whitelist | `ConfigValidator.oneOf("red", "blue")` |
+| Custom | Custom rule | `.addRule(predicate, "error msg")` |
 
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference for common patterns
-- **[CONFIG_PATTERNS.md](CONFIG_PATTERNS.md)** - Different ways to handle JavaPlugin reference
-- **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** - Migrate from old API
-- **[IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md)** - Technical details of improvements
-- **[ExampleConfig.java](src/main/java/me/mortaldev/ExampleConfig.java)** - Working example
+## Performance
 
----
+| Operation | Without Cache | With Cache | Speedup |
+|-----------|--------------|------------|---------|
+| First access | 2.5ms | 2.5ms | 1x |
+| Repeated (1000x) | 2500ms | 1ms | **2500x** |
 
-## 🎯 Common Patterns
+## Common Patterns
 
 ### Basic Config Value
 ```java
-private ConfigValue<String> serverName =
-    new ConfigValue<>("server-name", String.class, "Default Server");
+private ConfigValue<String> name =
+    new ConfigValue<>("server-name", String.class, "Default");
 
-public String getServerName() {
-    return serverName.getValue();
-}
+public String getName() { return name.getValue(); }
 ```
 
-### Validated Range
+### Validated Value
 ```java
-private ConfigValue<Integer> playerLevel =
+private ConfigValue<Integer> level =
     new ConfigValue<>("level", Integer.class, 1)
         .setValidator(ConfigValidator.range(1, 100));
 ```
@@ -131,227 +165,48 @@ private ConfigValue<Integer> evenNumber =
         );
 ```
 
-### Nested Paths
+### List Values
 ```java
-private ConfigValue<Double> multiplier =
-    new ConfigValue<>("economy.coin-multiplier", Double.class, 1.0)
-        .setValidator(ConfigValidator.min(0.1));
+private ConfigValue<List> items =
+    new ConfigValue<>("items", List.class, Arrays.asList("sword", "shield"))
+        .setValidator(ListValidators.stringList(1, 100));
 ```
 
----
-
-## 🔧 Available Validators
-
-| Validator | Description | Example |
-|-----------|-------------|---------|
-| `range(min, max)` | Numeric range | `ConfigValidator.range(1, 100)` |
-| `min(value)` | Minimum value | `ConfigValidator.min(0)` |
-| `max(value)` | Maximum value | `ConfigValidator.max(1000)` |
-| `notEmpty()` | Non-empty string | `ConfigValidator.notEmpty()` |
-| `length(min, max)` | String length | `ConfigValidator.length(3, 20)` |
-| `matches(regex)` | Regex pattern | `ConfigValidator.matches("^[A-Z]+$")` |
-| `oneOf(values)` | Whitelist | `ConfigValidator.oneOf("red", "blue")` |
-| `notNull()` | Non-null | `ConfigValidator.notNull()` |
-| Custom | Custom rule | `.addRule(predicate, "error msg")` |
-
----
-
-## 🚀 Performance
-
-| Operation | Without Cache | With Cache | Speedup |
-|-----------|--------------|------------|---------|
-| First access | 2.5ms | 2.5ms | 1x |
-| Repeated access | 2500ms (1000x) | 1ms | **2500x** |
-| Memory overhead | 0 | ~64 bytes/value | Minimal |
-
-**Recommendation:** Keep caching enabled (default) unless config changes externally.
-
----
-
-## 🛡️ Thread Safety
-
-All operations are thread-safe when using the new API:
-
-✅ **Safe:**
-```java
-YAML.getInstance().getConfig(plugin, "config");
-config.getConfigValue(value);
-config.saveValue(value);
-```
-
-⚠️ **Deprecated (Not Thread-Safe):**
-```java
-YAML yaml = YAML.getInstance();
-yaml.setMain(plugin);  // Race condition!
-yaml.getConfig("config");
-```
-
----
-
-## 📝 Complete Example
+## Lifecycle
 
 ```java
-public class GameConfig extends AbstractConfig {
-    private JavaPlugin plugin;
-
-    private ConfigValue<Integer> roundTime =
-        new ConfigValue<>("game.round-time", Integer.class, 300)
-            .setValidator(ConfigValidator.range(60, 3600));
-
-    private ConfigValue<String> mapName =
-        new ConfigValue<>("game.map", String.class, "default")
-            .setValidator(ConfigValidator.notEmpty());
-
-    private ConfigValue<Boolean> pvpEnabled =
-        new ConfigValue<>("game.pvp", Boolean.class, true);
-
-    private static final GameConfig INSTANCE = new GameConfig();
-    public static GameConfig getInstance() { return INSTANCE; }
-    private GameConfig() {}
-
-    public void setPlugin(JavaPlugin plugin) {
-        this.plugin = plugin;
-    }
-
-    @Override
-    public void loadData() {
-        roundTime = getConfigValue(roundTime);
-        mapName = getConfigValue(mapName);
-        pvpEnabled = getConfigValue(pvpEnabled);
-    }
-
-    @Override public String getName() { return "game-config"; }
-    @Override public JavaPlugin getMain() { return plugin; }
-    @Override public void log(String msg) {
-        if (plugin != null) plugin.getLogger().info(msg);
-    }
-
-    // Getters
-    public int getRoundTime() { return roundTime.getValue(); }
-    public String getMapName() { return mapName.getValue(); }
-    public boolean isPvpEnabled() { return pvpEnabled.getValue(); }
-
-    // Setters with auto-save and validation
-    public void setRoundTime(int time) {
-        roundTime.setValue(time);
-        saveValue(roundTime);  // Validates and saves
-    }
-
-    public void setMapName(String name) {
-        mapName.setValue(name);
-        saveValue(mapName);
-    }
-
-    public void setPvpEnabled(boolean enabled) {
-        pvpEnabled.setValue(enabled);
-        saveValue(pvpEnabled);
-    }
-}
-
-// Usage in main plugin:
-public class MyPlugin extends JavaPlugin {
-    @Override
-    public void onEnable() {
-        GameConfig config = GameConfig.getInstance();
-        config.setPlugin(this);
-        config.load();
-
-        getLogger().info("Round time: " + config.getRoundTime());
-        getLogger().info("Map: " + config.getMapName());
-
-        // Change values
-        config.setRoundTime(600);  // Validated and saved automatically
-    }
-}
-```
-
----
-
-## 🔄 Lifecycle
-
-```java
-// Plugin enable
+// On plugin enable
 config.setPlugin(this);
-config.load();              // Initial load from disk
+config.load();
 
-// User runs /reload command
-config.reload();            // Reload + clear cache
+// User runs /reload
+config.reload();
 
 // Manual save
-config.saveConfig();        // Save current state
+config.saveConfig();
 
-// Clear cache only
-config.clearCache();        // Force next access to read disk
+// Clear cache
+config.clearCache();
 ```
 
----
+## Examples
 
-## ⚙️ Advanced Features
+See [ExampleConfig.java](src/main/java/me/mortaldev/ExampleConfig.java) for a complete working example showing:
+- Type-safe config values
+- Validation with built-in and custom validators
+- Proper setup and lifecycle
+- Getters and setters
 
-### Cache Control
+## Thread Safety
+
+All operations are thread-safe:
 ```java
-// Disable caching if config changes externally
-config.setCacheEnabled(false);
-
-// Clear specific value from cache
-config.clearCacheValue("max-players");
-
-// Check cache status
-boolean cacheEnabled = config.isCacheEnabled();
+CompletableFuture.runAsync(() -> {
+    config.getMaxPlayers();  // Safe!
+});
 ```
 
-### Batch Operations
-```java
-// Save multiple values at once (single disk write)
-config.saveValue("value-a", a, false);
-config.saveValue("value-b", b, false);
-config.saveValue("value-c", c, false);
-config.saveConfig();  // Write all at once
-```
-
-### Validation Checking
-```java
-ConfigValue<Integer> value = getConfigValue(myValue);
-
-if (!value.isValid()) {
-    log("Validation failed: " + value.validate().getErrorMessage());
-}
-```
-
----
-
-## 🐛 Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| "Cannot determine type" | Use `new ConfigValue<>(id, Type.class, default)` |
-| "JavaPlugin not set" | Call `config.setPlugin(this)` before `load()` |
-| Validation errors on load | Check default values match validators |
-| Cache not updating | Call `clearCache()` or disable caching |
-| Slow performance | Enable caching (default) |
-
----
-
-## 📊 What's New
-
-This version fixes critical bugs and adds powerful features:
-
-### Fixed
-- ✅ Type erasure in ConfigValue
-- ✅ Thread-safety issues in YAML singleton
-- ✅ Resource leaks in file operations
-
-### Added
-- ✨ Validation framework
-- ✨ Performance caching (1000-2500x faster)
-- ✨ Better error handling
-- ✨ Comprehensive documentation
-
-See [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) for technical details.
-
----
-
-## 💡 Best Practices
+## Best Practices
 
 1. **Always use explicit types:**
    ```java
@@ -366,10 +221,7 @@ See [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) for technical details.
 
 3. **Keep caching enabled** (default)
 
-4. **Use thread-safe YAML methods:**
-   ```java
-   YAML.getInstance().getConfig(plugin, name)  // ✅
-   ```
+4. **Use ValueContainers** for large configs
 
 5. **Set plugin before loading:**
    ```java
@@ -377,14 +229,10 @@ See [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) for technical details.
    config.load();
    ```
 
----
-
-## 📄 License
+## License
 
 See your project's license file.
 
----
+## Contributing
 
-## 🤝 Contributing
-
-See [CONFIG_PATTERNS.md](CONFIG_PATTERNS.md) for different implementation patterns and choose what works best for your use case!
+This is a library for internal use. For patterns and examples, see the documentation in the `docs/` folder.
