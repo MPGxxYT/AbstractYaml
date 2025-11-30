@@ -2,6 +2,15 @@
 
 A modern, type-safe, immutable configuration system for Bukkit/Spigot plugins.
 
+## Table of Contents
+
+- [Installation](#installation) ⚠️ **Start here!**
+- [Quick Start](#quick-start)
+- [Generated Type-Safe Wrappers](#generated-type-safe-wrappers) - Recommended!
+- [Troubleshooting](#troubleshooting-generatewrapper)
+- [API Documentation](#api-documentation)
+- [Migration Guide](MIGRATION_GUIDE.md)
+
 ## Features
 
 - ✅ **Fully Type-Safe** - No casting, no `@SuppressWarnings`
@@ -12,6 +21,74 @@ A modern, type-safe, immutable configuration system for Bukkit/Spigot plugins.
 - ✅ **Validation** - Catch errors at load time, not runtime
 - ✅ **Sections** - Organize related values
 - ✅ **Lists** - Type-safe lists (String, Integer, Double)
+
+## Installation
+
+### Step 1: Add AbstractYaml Dependency
+
+Add to your project's `pom.xml`:
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>me.mortaldev</groupId>
+        <artifactId>AbstractYaml</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <scope>compile</scope>
+    </dependency>
+</dependencies>
+```
+
+### Step 2: Add Config Wrapper Maven Plugin (Required for @GenerateWrapper)
+
+**⚠️ IMPORTANT:** If you want to use `@GenerateWrapper` for type-safe config access, you **MUST** add the wrapper generator plugin to your `pom.xml`:
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>me.mortaldev</groupId>
+            <artifactId>config-wrapper-maven-plugin</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <executions>
+                <execution>
+                    <phase>process-classes</phase>
+                    <goals>
+                        <goal>generate</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
+```
+
+**Without this plugin:**
+- `@GenerateWrapper` will not work
+- Type-safe wrapper classes will not be generated
+
+**With this plugin:**
+- Wrapper classes are generated after compilation (can instantiate schemas)
+- No runtime overhead
+- Full IDE autocomplete support
+- Compile-time type safety
+- Runs automatically during build
+
+### Step 3: Build AbstractYaml and Plugin
+
+Before using in your project, build and install both AbstractYaml and the plugin to your local Maven repository:
+
+```bash
+# Build AbstractYaml
+cd AbstractYaml
+mvn clean install
+
+# Build the wrapper generator plugin
+cd ../config-wrapper-maven-plugin
+mvn clean install
+```
+
+You only need to do this once, or whenever AbstractYaml/plugin is updated.
 
 ## Quick Start
 
@@ -441,6 +518,8 @@ See `example/AutoRegisterExample.java` for a complete working example.
 
 Eliminate string-based config access with auto-generated wrapper classes!
 
+**⚠️ PREREQUISITE:** You **MUST** configure annotation processing in your `pom.xml` first! See [Installation](#installation) section above.
+
 ### Problem: String-Based Access
 
 ```java
@@ -543,6 +622,51 @@ int newCooldown = Abilities.Keraunos.cooldown();
 ```
 
 See `example/GeneratedWrapperExample.java` for complete examples.
+
+### Troubleshooting @GenerateWrapper
+
+**Generated classes not appearing?**
+
+1. Make sure you've built AbstractYaml and the plugin first:
+   ```bash
+   cd AbstractYaml && mvn clean install
+   cd ../config-wrapper-maven-plugin && mvn clean install
+   ```
+
+2. Verify the plugin is configured in your `pom.xml` (see [Installation](#installation))
+
+3. Clean and rebuild your project: `mvn clean compile`
+
+4. Check the build output for generation messages:
+   ```
+   [INFO] Generating config wrapper classes...
+   [INFO] Found 3 schema(s) to process
+   [INFO] Generated Abilities.java
+   ```
+
+5. Look for generated files in `src/main/java/[your-package]/`
+
+**Generated classes have wrong package?**
+
+Use the `packageName` parameter:
+```java
+@GenerateWrapper(packageName = "me.mortaldev.yourplugin.config")
+public class YourConfigSchema extends ConfigSchema { }
+```
+
+**Plugin not running?**
+
+Check that you have the `<executions>` block in your plugin configuration:
+```xml
+<executions>
+    <execution>
+        <phase>process-classes</phase>
+        <goals>
+            <goal>generate</goal>
+        </goals>
+    </execution>
+</executions>
+```
 
 ## Design Philosophy
 

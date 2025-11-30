@@ -5,9 +5,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
 
-/**
- * Complete example of using the auto-registration system.
- */
+/** Complete example of using the auto-registration system. */
 public class AutoRegisterExample {
 
   // ===== Step 1: Define Your Schemas =====

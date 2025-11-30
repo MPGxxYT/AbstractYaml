@@ -89,8 +89,8 @@ public sealed interface ConfigValue<T> permits
 
   record Int(
       java.lang.String path,
-      int value,
-      int defaultValue,
+      Integer value,
+      Integer defaultValue,
       java.lang.String comment,
       Validator<Integer> validator) implements ConfigValue<Integer> {
 
@@ -111,16 +111,6 @@ public sealed interface ConfigValue<T> permits
     }
 
     @Override
-    public Integer value() {
-      return value;
-    }
-
-    @Override
-    public Integer defaultValue() {
-      return defaultValue;
-    }
-
-    @Override
     public ConfigValue<Integer> withValue(Integer newValue) {
       return new Int(path, newValue, defaultValue, comment, validator);
     }
@@ -133,8 +123,8 @@ public sealed interface ConfigValue<T> permits
 
   record Double(
       java.lang.String path,
-      double value,
-      double defaultValue,
+      java.lang.Double value,
+      java.lang.Double defaultValue,
       java.lang.String comment,
       Validator<java.lang.Double> validator) implements ConfigValue<java.lang.Double> {
 
@@ -155,16 +145,6 @@ public sealed interface ConfigValue<T> permits
     }
 
     @Override
-    public java.lang.Double value() {
-      return value;
-    }
-
-    @Override
-    public java.lang.Double defaultValue() {
-      return defaultValue;
-    }
-
-    @Override
     public ConfigValue<java.lang.Double> withValue(java.lang.Double newValue) {
       return new Double(path, newValue, defaultValue, comment, validator);
     }
@@ -177,8 +157,8 @@ public sealed interface ConfigValue<T> permits
 
   record Boolean(
       java.lang.String path,
-      boolean value,
-      boolean defaultValue,
+      java.lang.Boolean value,
+      java.lang.Boolean defaultValue,
       java.lang.String comment,
       Validator<java.lang.Boolean> validator) implements ConfigValue<java.lang.Boolean> {
 
@@ -196,16 +176,6 @@ public sealed interface ConfigValue<T> permits
         Validator<java.lang.Boolean> validator,
         java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, validator);
-    }
-
-    @Override
-    public java.lang.Boolean value() {
-      return value;
-    }
-
-    @Override
-    public java.lang.Boolean defaultValue() {
-      return defaultValue;
     }
 
     @Override

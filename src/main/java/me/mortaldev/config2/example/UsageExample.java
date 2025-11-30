@@ -191,7 +191,7 @@ public class UsageExample {
     // Update methods
     public void setKeraunosCooldown(int value) {
       Config updated = keraunos.set("cooldown", value);
-      updated.save(/* file */);
+      //updated.save(file);
     }
 
     public void reload(JavaPlugin plugin) {

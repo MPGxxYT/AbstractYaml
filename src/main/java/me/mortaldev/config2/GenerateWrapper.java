@@ -42,7 +42,7 @@ import java.lang.annotation.Target;
  * double radius = Abilities.Keraunos.radius();
  * }</pre>
  */
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface GenerateWrapper {
 

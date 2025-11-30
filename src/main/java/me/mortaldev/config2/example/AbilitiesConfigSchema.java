@@ -1,19 +1,14 @@
 package me.mortaldev.config2.example;
 
 import me.mortaldev.config2.ConfigSchema;
+import me.mortaldev.config2.ConfigValue;
 import me.mortaldev.config2.Validator;
 
-import java.util.List;
-
 /**
- * Example configuration schema for abilities.
- * This demonstrates the new streamlined config system.
+ * Example configuration schema for abilities. This demonstrates the new streamlined config system.
  *
- * <p>Compare this to the old system which required:
- * - AbstractConfig class
- * - Multiple container classes
- * - Manual field declarations
- * - Boilerplate getters/setters
+ * <p>Compare this to the old system which required: - AbstractConfig class - Multiple container
+ * classes - Manual field declarations - Boilerplate getters/setters
  *
  * <p>The new system requires only this single schema class!
  */
@@ -49,8 +44,6 @@ public class AbilitiesConfigSchema extends ConfigSchema {
         .intValue("duration", 5, Validator.range(1, 60), "Invisibility duration in seconds");
 
     // You can also add top-level values without a section
-    value(
-        new me.mortaldev.config2.ConfigValue.Boolean(
-            "abilities-enabled", true, "Master toggle for all abilities"));
+    value(new ConfigValue.Boolean("abilities-enabled", true, "Master toggle for all abilities"));
   }
 }

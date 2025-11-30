@@ -71,6 +71,12 @@ public class GeneratedWrapperExample {
   // }
 
   // ===== Step 3: Use the Generated Wrapper =====
+  // NOTE: The examples below show what your code would look like.
+  // The Abilities class will be generated when YOU compile YOUR project with @GenerateWrapper.
+  // This example file is in the AbstractYaml library (which has proc=none), so it can't
+  // demonstrate the actual usage. Copy this pattern into your own project!
+
+  /* EXAMPLE USAGE - Copy this to your project after adding @GenerateWrapper:
 
   public static class KeraunosAbility {
     public void onUse() {
@@ -115,6 +121,8 @@ public class GeneratedWrapperExample {
     }
   }
 
+  */ // End of example usage
+
   // ===== Advanced: Custom Wrapper Name =====
 
   @RegisterConfig
@@ -154,6 +162,9 @@ public class GeneratedWrapperExample {
   // Generated class won't have reload() methods
 
   // ===== Benefits =====
+  // Copy this pattern to your project after @GenerateWrapper generates the wrapper class
+
+  /* EXAMPLE - Benefits demonstration:
 
   public static void demonstrateBenefits() {
     // ✅ Type-safe - compile errors instead of runtime errors
@@ -174,7 +185,12 @@ public class GeneratedWrapperExample {
     // Abilities.Keraunos.cooldown(); // Compile-time safety!
   }
 
+  */
+
   // ===== Reload Example =====
+  // Copy this pattern to your project
+
+  /* EXAMPLE - Reload pattern:
 
   public static void handleReload() {
     // Reload the config through ConfigManager
@@ -187,6 +203,8 @@ public class GeneratedWrapperExample {
     int newCooldown = Abilities.Keraunos.cooldown();
     System.out.println("Reloaded cooldown: " + newCooldown);
   }
+
+  */
 }
 
 // ===== IMPORTANT: Generated Classes =====

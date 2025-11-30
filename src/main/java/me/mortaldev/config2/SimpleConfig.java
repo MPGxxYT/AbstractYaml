@@ -3,9 +3,7 @@ package me.mortaldev.config2;
 import java.io.File;
 import java.util.*;
 
-/**
- * Simple immutable implementation of Config.
- */
+/** Simple immutable implementation of Config. */
 class SimpleConfig implements Config {
   private final ConfigSchema schema;
   private final Map<String, ConfigValue<?>> values;
@@ -40,7 +38,7 @@ class SimpleConfig implements Config {
   @Override
   @SuppressWarnings("unchecked")
   public <T> Optional<T> getValue(String path) {
-    return get(path).map(ConfigValue::value);
+    return this.<T>get(path).map(ConfigValue::value);
   }
 
   @Override
@@ -161,9 +159,7 @@ class SimpleConfig implements Config {
     return new SimpleConfigSection(this, prefix);
   }
 
-  /**
-   * Simple implementation of ConfigSection.
-   */
+  /** Simple implementation of ConfigSection. */
   private static class SimpleConfigSection implements ConfigSection {
     private final Config config;
     private final String prefix;
