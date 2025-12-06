@@ -77,7 +77,7 @@ public sealed interface ConfigValue<T> permits
         java.lang.String defaultValue,
         Validator<java.lang.String> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -111,7 +111,7 @@ public sealed interface ConfigValue<T> permits
         int defaultValue,
         Validator<Integer> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -145,7 +145,7 @@ public sealed interface ConfigValue<T> permits
         double defaultValue,
         Validator<java.lang.Double> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -179,7 +179,7 @@ public sealed interface ConfigValue<T> permits
         boolean defaultValue,
         Validator<java.lang.Boolean> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -217,7 +217,7 @@ public sealed interface ConfigValue<T> permits
         java.util.List<java.lang.String> defaultValue,
         Validator<java.util.List<java.lang.String>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -254,7 +254,7 @@ public sealed interface ConfigValue<T> permits
         java.util.List<Integer> defaultValue,
         Validator<java.util.List<Integer>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -292,7 +292,7 @@ public sealed interface ConfigValue<T> permits
         java.util.List<java.lang.Double> defaultValue,
         Validator<java.util.List<java.lang.Double>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -346,7 +346,7 @@ public sealed interface ConfigValue<T> permits
         java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
         Validator<java.util.List<java.util.Map<java.lang.String, Object>>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -397,7 +397,7 @@ public sealed interface ConfigValue<T> permits
         java.util.Map<java.lang.String, Object> defaultValue,
         Validator<java.util.Map<java.lang.String, Object>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -448,7 +448,7 @@ public sealed interface ConfigValue<T> permits
         java.util.Map<java.lang.String, java.lang.String> defaultValue,
         Validator<java.util.Map<java.lang.String, java.lang.String>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
@@ -499,7 +499,7 @@ public sealed interface ConfigValue<T> permits
         java.util.Map<java.lang.String, Integer> defaultValue,
         Validator<java.util.Map<java.lang.String, Integer>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator);
+      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
     }
 
     @Override
