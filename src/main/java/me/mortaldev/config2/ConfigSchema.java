@@ -96,9 +96,15 @@ public abstract class ConfigSchema {
   protected class SectionBuilder {
     private final String prefix;
     private String sectionHeader;
+    private final SectionBuilder parent;
 
     private SectionBuilder(String prefix) {
+      this(prefix, null);
+    }
+
+    private SectionBuilder(String prefix, SectionBuilder parent) {
       this.prefix = prefix;
+      this.parent = parent;
     }
 
     /**
@@ -205,6 +211,167 @@ public abstract class ConfigSchema {
         String key, java.util.List<java.lang.Double> defaultValue, String comment) {
       value(new ConfigValue.DoubleList(prefix + "." + key, defaultValue, comment));
       return this;
+    }
+
+    /**
+     * Adds an integer list with validation to this section.
+     */
+    public SectionBuilder intListValue(
+        String key,
+        java.util.List<Integer> defaultValue,
+        Validator<java.util.List<Integer>> validator,
+        String comment) {
+      value(new ConfigValue.IntList(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Adds a double list with validation to this section.
+     */
+    public SectionBuilder doubleListValue(
+        String key,
+        java.util.List<java.lang.Double> defaultValue,
+        Validator<java.util.List<java.lang.Double>> validator,
+        String comment) {
+      value(new ConfigValue.DoubleList(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Adds a string list value to this section.
+     */
+    public SectionBuilder stringListValue(
+        String key, java.util.List<String> defaultValue, String comment) {
+      value(new ConfigValue.StringList(prefix + "." + key, defaultValue, comment));
+      return this;
+    }
+
+    /**
+     * Adds a string list with validation to this section.
+     */
+    public SectionBuilder stringListValue(
+        String key,
+        java.util.List<String> defaultValue,
+        Validator<java.util.List<String>> validator,
+        String comment) {
+      value(new ConfigValue.StringList(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Adds a list of maps (objects) to this section.
+     * Useful for complex configuration structures like lists of objects.
+     */
+    public SectionBuilder mapListValue(
+        String key,
+        java.util.List<java.util.Map<String, Object>> defaultValue,
+        String comment) {
+      value(new ConfigValue.MapList(prefix + "." + key, defaultValue, comment));
+      return this;
+    }
+
+    /**
+     * Adds a list of maps (objects) with validation to this section.
+     */
+    public SectionBuilder mapListValue(
+        String key,
+        java.util.List<java.util.Map<String, Object>> defaultValue,
+        Validator<java.util.List<java.util.Map<String, Object>>> validator,
+        String comment) {
+      value(new ConfigValue.MapList(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Adds a single map/object to this section.
+     * Useful for configuration objects with mixed types.
+     */
+    public SectionBuilder mapValue(
+        String key,
+        java.util.Map<String, Object> defaultValue,
+        String comment) {
+      value(new ConfigValue.MapValue(prefix + "." + key, defaultValue, comment));
+      return this;
+    }
+
+    /**
+     * Adds a single map/object with validation to this section.
+     */
+    public SectionBuilder mapValue(
+        String key,
+        java.util.Map<String, Object> defaultValue,
+        Validator<java.util.Map<String, Object>> validator,
+        String comment) {
+      value(new ConfigValue.MapValue(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Adds a String-to-String map to this section.
+     * Useful for simple key-value pairs.
+     */
+    public SectionBuilder stringMapValue(
+        String key,
+        java.util.Map<String, String> defaultValue,
+        String comment) {
+      value(new ConfigValue.StringMap(prefix + "." + key, defaultValue, comment));
+      return this;
+    }
+
+    /**
+     * Adds a String-to-String map with validation to this section.
+     */
+    public SectionBuilder stringMapValue(
+        String key,
+        java.util.Map<String, String> defaultValue,
+        Validator<java.util.Map<String, String>> validator,
+        String comment) {
+      value(new ConfigValue.StringMap(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Adds a String-to-Integer map to this section.
+     * Useful for numeric mappings.
+     */
+    public SectionBuilder intMapValue(
+        String key,
+        java.util.Map<String, Integer> defaultValue,
+        String comment) {
+      value(new ConfigValue.IntMap(prefix + "." + key, defaultValue, comment));
+      return this;
+    }
+
+    /**
+     * Adds a String-to-Integer map with validation to this section.
+     */
+    public SectionBuilder intMapValue(
+        String key,
+        java.util.Map<String, Integer> defaultValue,
+        Validator<java.util.Map<String, Integer>> validator,
+        String comment) {
+      value(new ConfigValue.IntMap(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
+     * Creates a nested section within this section.
+     * The nested section's prefix will be this section's prefix + the new section name.
+     */
+    public SectionBuilder section(String sectionName) {
+      return new SectionBuilder(prefix + "." + sectionName, this);
+    }
+
+    /**
+     * Returns to the parent section builder.
+     * This allows for chaining nested sections and returning to the parent level.
+     * Returns the ConfigSchema's section builder if called on a root section.
+     */
+    public SectionBuilder parent() {
+      if (parent == null) {
+        throw new IllegalStateException("Cannot call parent() on a root section. This section has no parent.");
+      }
+      return parent;
     }
   }
 }

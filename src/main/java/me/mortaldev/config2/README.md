@@ -20,7 +20,10 @@ A modern, type-safe, immutable configuration system for Bukkit/Spigot plugins.
 - ✅ **Auto-Generation** - Creates YAML files with comments automatically
 - ✅ **Validation** - Catch errors at load time, not runtime
 - ✅ **Sections** - Organize related values
+- ✅ **Nested Sections** - **NEW!** Unlimited nesting depth with `.section().section()...`
 - ✅ **Lists** - Type-safe lists (String, Integer, Double)
+- ✅ **Generated Wrappers** - **IMPROVED!** Auto-generated type-safe wrappers with `Wrapper` suffix in `.wrappers` package
+- ✅ **Nested Wrapper Classes** - **NEW!** Deeply nested configs generate matching nested static classes
 
 ## Installation
 
@@ -100,19 +103,26 @@ public class MyConfigSchema extends ConfigSchema {
         super("config");
 
         // Add a file header (optional)
-        header("My Plugin Configuration");
+        header("""
+            ====================================================================
+                             My Plugin Configuration
+            ====================================================================
+            This is your main configuration file.
+            ====================================================================""");
 
         // Define values
         value(new ConfigValue.Int("max-players", 10, "Maximum players"));
         value(new ConfigValue.String("server-name", "My Server", "Server name"));
         value(new ConfigValue.Boolean("debug-mode", false, "Enable debug logging"));
 
-        // Or use sections for organization
+        // Use sections for organization
         section("economy")
+            .header("Economy Settings")
             .doubleValue("coin-multiplier", 1.0, Validator.min(0.1), "Coin earn multiplier")
             .intValue("starting-balance", 100, Validator.min(0), "Starting balance");
 
         section("features")
+            .header("Feature Toggles")
             .boolValue("pvp-enabled", true, "Enable PvP")
             .boolValue("trading-enabled", true, "Enable trading");
     }
@@ -244,34 +254,85 @@ section("timers")
 
 ```java
 // String lists
-value(new ConfigValue.StringList(
-    "blocked-words",
-    List.of("spam", "hack"),
-    Validator.minSize(1),
-    "Words to block in chat"
-));
+section("chat")
+    .header("Chat Settings")
+    .stringListValue(
+        "blocked-words",
+        List.of("spam", "hack"),
+        Validator.minSize(1),
+        "Words to block in chat");
 
-List<String> blockedWords = config.getStringList("blocked-words");
+List<String> blockedWords = config.section("chat").getStringList("blocked-words");
 
 // Integer lists
-value(new ConfigValue.IntList(
-    "reward-levels",
-    List.of(1, 5, 10, 25, 50),
-    Validator.allIntegersInRange(1, 100),
-    "Levels that give rewards"
-));
+section("rewards")
+    .header("Reward Configuration")
+    .intListValue(
+        "levels",
+        List.of(1, 5, 10, 25, 50),
+        Validator.allIntegersInRange(1, 100),
+        "Levels that give rewards");
 
-List<Integer> levels = config.getIntList("reward-levels");
+List<Integer> levels = config.section("rewards").getIntList("levels");
 
 // Double lists
-value(new ConfigValue.DoubleList(
-    "multipliers",
-    List.of(0.5, 1.0, 1.5, 2.0),
-    Validator.allDoublesInRange(0.1, 5.0),
-    "Difficulty multipliers"
-));
+section("difficulty")
+    .header("Difficulty Multipliers")
+    .doubleListValue(
+        "multipliers",
+        List.of(0.5, 1.0, 1.5, 2.0),
+        Validator.allDoublesInRange(0.1, 5.0),
+        "Difficulty multipliers");
 
-List<Double> multipliers = config.getDoubleList("multipliers");
+List<Double> multipliers = config.section("difficulty").getDoubleList("multipliers");
+```
+
+## Nested Sections
+
+**NEW:** Sections can now be nested multiple levels deep!
+
+```java
+public class ScoringConfigSchema extends ConfigSchema {
+    public ScoringConfigSchema() {
+        super("scoring");
+
+        section("scoring")
+            .header("Win Conditions")
+            .intValue("points-to-win", 3, Validator.min(1), "First team to X points wins")
+            .intValue("points-per-capture", 1, Validator.min(1), "Points per flag capture")
+            .header("Rewards")
+            .section("rewards")             // ← Nested section
+                .section("capture-flag")    // ← Nested even deeper!
+                    .intValue("coins", 10, Validator.min(0), "Coins for capturing")
+                    .intValue("xp", 15, Validator.min(0), "XP for capturing")
+                    .parent()               // ← Return to parent section
+                .section("win-game")
+                    .intValue("coins", 30, Validator.min(0), "Coins for winning")
+                    .intValue("xp", 20, Validator.min(0), "XP for winning")
+                    .parent()
+                .section("lose-game")
+                    .intValue("coins", 5, Validator.min(0), "Coins for losing")
+                    .intValue("xp", 5, Validator.min(0), "XP for losing");
+    }
+}
+```
+
+This creates paths like:
+- `scoring.points-to-win`
+- `scoring.points-per-capture`
+- `scoring.rewards.capture-flag.coins`
+- `scoring.rewards.capture-flag.xp`
+- `scoring.rewards.win-game.coins`
+- etc.
+
+**Access nested values:**
+```java
+// Access deeply nested values
+ConfigSection rewards = config.section("scoring").section("rewards");
+int captureCoins = rewards.section("capture-flag").getInt("coins");
+
+// Or use the full path
+int captureCoins = config.getInt("scoring.rewards.capture-flag.coins");
 ```
 
 ## Advanced Features
@@ -549,8 +610,13 @@ public class AbilitiesConfigSchema extends ConfigSchema {
 **Compiling automatically generates:**
 
 ```java
-public class Abilities {
+// Generated in me.mortaldev.yourplugin.configs.wrappers package
+public final class AbilitiesWrapper {
+    private static final String CONFIG_NAME = "abilities";
+
     public static class Keraunos {
+        private static ConfigSection section;
+
         /** Cooldown in seconds */
         public static int cooldown() {
             return section().getInt("cooldown");
@@ -561,10 +627,17 @@ public class Abilities {
             return section().getDouble("radius");
         }
 
-        private static ConfigSection section() { ... }
-        static void reload() { ... }
+        private static ConfigSection section() {
+            if (section == null) {
+                section = ConfigManager.getInstance().getSection(CONFIG_NAME, "keraunos");
+            }
+            return section;
+        }
+
+        static void reload() { section = null; }
     }
 
+    /** Reloads all cached config sections */
     public static void reload() {
         Keraunos.reload();
     }
@@ -575,11 +648,69 @@ public class Abilities {
 
 ```java
 // No strings! IDE autocomplete works! Compile-time safety!
-int cooldown = Abilities.Keraunos.cooldown();
-double radius = Abilities.Keraunos.radius();
+int cooldown = AbilitiesWrapper.Keraunos.cooldown();
+double radius = AbilitiesWrapper.Keraunos.radius();
 
 // Typo = compile error (caught immediately!)
-// double radius = Abilities.Keraunos.raduis();  // Doesn't compile!
+// double radius = AbilitiesWrapper.Keraunos.raduis();  // Doesn't compile!
+```
+
+### Nested Sections in Wrappers
+
+Nested sections generate nested static classes:
+
+```java
+@RegisterConfig
+@GenerateWrapper
+public class ScoringConfigSchema extends ConfigSchema {
+    public ScoringConfigSchema() {
+        super("scoring");
+
+        section("scoring")
+            .section("rewards")
+                .section("capture-flag")
+                    .intValue("coins", 10, Validator.min(0), "Coins for capturing")
+                    .intValue("xp", 15, Validator.min(0), "XP for capturing");
+    }
+}
+```
+
+**Generates:**
+
+```java
+public final class ScoringWrapper {
+    public static class Scoring {
+        public static class Rewards {
+            public static class CaptureFlag {
+                /** Coins for capturing */
+                public static int coins() {
+                    return section().getInt("coins");
+                }
+
+                /** XP for capturing */
+                public static int xp() {
+                    return section().getInt("xp");
+                }
+
+                private static ConfigSection section() { ... }
+                static void reload() { section = null; }
+            }
+
+            static void reload() { CaptureFlag.reload(); }
+        }
+
+        static void reload() { Rewards.reload(); }
+    }
+
+    public static void reload() { Scoring.reload(); }
+}
+```
+
+**Usage:**
+```java
+// Clean, type-safe nested access!
+int coins = ScoringWrapper.Scoring.Rewards.CaptureFlag.coins();
+int xp = ScoringWrapper.Scoring.Rewards.CaptureFlag.xp();
 ```
 
 ### Benefits
@@ -596,17 +727,34 @@ double radius = Abilities.Keraunos.radius();
 // Custom wrapper name
 @GenerateWrapper(value = "CTFSettings")
 public class CTFConfigSchema extends ConfigSchema { }
-// Generates: CTFSettings.java
+// Generates: CTFSettingsWrapper.java in ...configs.wrappers package
+// Note: "Wrapper" suffix is automatically added
 
-// Custom package
+// Custom package (wrappers subpackage is still added)
 @GenerateWrapper(packageName = "me.mortaldev.api")
 public class APIConfigSchema extends ConfigSchema { }
-// Generates: me.mortaldev.api.API.java
+// Generates: me.mortaldev.api.wrappers.APIWrapper.java
 
 // No reload methods
 @GenerateWrapper(generateReload = false)
 public class StaticConfigSchema extends ConfigSchema { }
+
+// Non-final class (allows extension, though not recommended)
+@GenerateWrapper(makeFinal = false)
+public class ExtendableConfigSchema extends ConfigSchema { }
 ```
+
+### Wrapper Naming Convention
+
+**Automatic naming:**
+- `AbilitiesConfigSchema` → `AbilitiesWrapper` (in `.wrappers` subpackage)
+- `CTFConfigSchema` → `CTFWrapper` (in `.wrappers` subpackage)
+- `MainConfigSchema` → `MainWrapper` (in `.wrappers` subpackage)
+
+**All wrappers:**
+- Automatically get "Wrapper" suffix to avoid naming conflicts
+- Are placed in a `.wrappers` subpackage
+- Are final by default (can be changed with `makeFinal = false`)
 
 ### Reload Pattern
 
@@ -615,10 +763,10 @@ public class StaticConfigSchema extends ConfigSchema { }
 ConfigManager.getInstance().reload("abilities");
 
 // Clear wrapper cache
-Abilities.reload();
+AbilitiesWrapper.reload();
 
 // Get fresh values
-int newCooldown = Abilities.Keraunos.cooldown();
+int newCooldown = AbilitiesWrapper.Keraunos.cooldown();
 ```
 
 See `example/GeneratedWrapperExample.java` for complete examples.
@@ -641,10 +789,15 @@ See `example/GeneratedWrapperExample.java` for complete examples.
    ```
    [INFO] Generating config wrapper classes...
    [INFO] Found 3 schema(s) to process
-   [INFO] Generated Abilities.java
+   [INFO] Generated AbilitiesWrapper.java
+   [INFO] Generated CTFWrapper.java
+   [INFO] Generated PhaseWrapper.java
    ```
 
-5. Look for generated files in `src/main/java/[your-package]/`
+5. Look for generated files in `src/main/java/[your-package]/wrappers/`
+   - Example: If your schemas are in `me.mortaldev.yourplugin.configs`
+   - Wrappers will be in `me.mortaldev.yourplugin.configs.wrappers`
+   - Files will be named `*Wrapper.java`
 
 **Generated classes have wrong package?**
 

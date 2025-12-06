@@ -105,6 +105,15 @@ class SimpleConfig implements Config {
   }
 
   @Override
+  public List<Map<String, Object>> getMapList(String path) {
+    ConfigValue<?> value = getOrThrow(path);
+    if (!(value instanceof ConfigValue.MapList)) {
+      throw new IllegalArgumentException("Value at " + path + " is not a map list");
+    }
+    return ((ConfigValue.MapList) value).value();
+  }
+
+  @Override
   public Map<String, ConfigValue<?>> allValues() {
     return values;
   }
@@ -221,6 +230,11 @@ class SimpleConfig implements Config {
     @Override
     public List<Double> getDoubleList(String relativePath) {
       return config.getDoubleList(fullPath(relativePath));
+    }
+
+    @Override
+    public List<Map<String, Object>> getMapList(String relativePath) {
+      return config.getMapList(fullPath(relativePath));
     }
 
     @Override

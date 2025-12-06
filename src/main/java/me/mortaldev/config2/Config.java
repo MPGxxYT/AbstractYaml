@@ -110,6 +110,15 @@ public interface Config {
   java.util.List<Double> getDoubleList(String path);
 
   /**
+   * Gets a list of maps.
+   *
+   * @param path the configuration path
+   * @return the list of maps
+   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
+   */
+  java.util.List<Map<String, Object>> getMapList(String path);
+
+  /**
    * Returns all configuration values.
    */
   Map<String, ConfigValue<?>> allValues();

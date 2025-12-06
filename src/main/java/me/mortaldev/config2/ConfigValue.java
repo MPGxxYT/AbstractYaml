@@ -13,7 +13,11 @@ public sealed interface ConfigValue<T> permits
     ConfigValue.Boolean,
     ConfigValue.StringList,
     ConfigValue.IntList,
-    ConfigValue.DoubleList {
+    ConfigValue.DoubleList,
+    ConfigValue.MapList,
+    ConfigValue.MapValue,
+    ConfigValue.StringMap,
+    ConfigValue.IntMap {
 
   /**
    * The configuration path for this value (e.g., "keraunos.cooldown").
@@ -295,6 +299,213 @@ public sealed interface ConfigValue<T> permits
     public ConfigValue<java.util.List<java.lang.Double>> withValue(
         java.util.List<java.lang.Double> newValue) {
       return new DoubleList(path, newValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ValidationResult validate() {
+      return validator.validate(value);
+    }
+  }
+
+  /**
+   * List of maps (objects) - useful for complex configuration structures.
+   * Example YAML:
+   * <pre>
+   * points:
+   *   - name: "point1"
+   *     radius: 3.0
+   *     duration: 100
+   *   - name: "point2"
+   *     radius: 5.0
+   *     duration: 200
+   * </pre>
+   */
+  record MapList(
+      java.lang.String path,
+      java.util.List<java.util.Map<java.lang.String, Object>> value,
+      java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
+      java.lang.String comment,
+      Validator<java.util.List<java.util.Map<java.lang.String, Object>>> validator)
+      implements ConfigValue<java.util.List<java.util.Map<java.lang.String, Object>>> {
+
+    public MapList(
+        java.lang.String path,
+        java.util.List<java.util.Map<java.lang.String, Object>> defaultValue) {
+      this(path, defaultValue, defaultValue, null, Validator.none());
+    }
+
+    public MapList(
+        java.lang.String path,
+        java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, Validator.none());
+    }
+
+    public MapList(
+        java.lang.String path,
+        java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
+        Validator<java.util.List<java.util.Map<java.lang.String, Object>>> validator,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ConfigValue<java.util.List<java.util.Map<java.lang.String, Object>>> withValue(
+        java.util.List<java.util.Map<java.lang.String, Object>> newValue) {
+      return new MapList(path, newValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ValidationResult validate() {
+      return validator.validate(value);
+    }
+  }
+
+  /**
+   * Single map/object - useful for configuration objects.
+   * Example YAML:
+   * <pre>
+   * player-stats:
+   *   health: 20
+   *   mana: 100
+   *   level: 5
+   * </pre>
+   */
+  record MapValue(
+      java.lang.String path,
+      java.util.Map<java.lang.String, Object> value,
+      java.util.Map<java.lang.String, Object> defaultValue,
+      java.lang.String comment,
+      Validator<java.util.Map<java.lang.String, Object>> validator)
+      implements ConfigValue<java.util.Map<java.lang.String, Object>> {
+
+    public MapValue(
+        java.lang.String path,
+        java.util.Map<java.lang.String, Object> defaultValue) {
+      this(path, defaultValue, defaultValue, null, Validator.none());
+    }
+
+    public MapValue(
+        java.lang.String path,
+        java.util.Map<java.lang.String, Object> defaultValue,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, Validator.none());
+    }
+
+    public MapValue(
+        java.lang.String path,
+        java.util.Map<java.lang.String, Object> defaultValue,
+        Validator<java.util.Map<java.lang.String, Object>> validator,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ConfigValue<java.util.Map<java.lang.String, Object>> withValue(
+        java.util.Map<java.lang.String, Object> newValue) {
+      return new MapValue(path, newValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ValidationResult validate() {
+      return validator.validate(value);
+    }
+  }
+
+  /**
+   * String-to-String map - useful for simple key-value configurations.
+   * Example YAML:
+   * <pre>
+   * team-colors:
+   *   red: "#FF0000"
+   *   blue: "#0000FF"
+   *   green: "#00FF00"
+   * </pre>
+   */
+  record StringMap(
+      java.lang.String path,
+      java.util.Map<java.lang.String, java.lang.String> value,
+      java.util.Map<java.lang.String, java.lang.String> defaultValue,
+      java.lang.String comment,
+      Validator<java.util.Map<java.lang.String, java.lang.String>> validator)
+      implements ConfigValue<java.util.Map<java.lang.String, java.lang.String>> {
+
+    public StringMap(
+        java.lang.String path,
+        java.util.Map<java.lang.String, java.lang.String> defaultValue) {
+      this(path, defaultValue, defaultValue, null, Validator.none());
+    }
+
+    public StringMap(
+        java.lang.String path,
+        java.util.Map<java.lang.String, java.lang.String> defaultValue,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, Validator.none());
+    }
+
+    public StringMap(
+        java.lang.String path,
+        java.util.Map<java.lang.String, java.lang.String> defaultValue,
+        Validator<java.util.Map<java.lang.String, java.lang.String>> validator,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ConfigValue<java.util.Map<java.lang.String, java.lang.String>> withValue(
+        java.util.Map<java.lang.String, java.lang.String> newValue) {
+      return new StringMap(path, newValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ValidationResult validate() {
+      return validator.validate(value);
+    }
+  }
+
+  /**
+   * String-to-Integer map - useful for numeric mappings.
+   * Example YAML:
+   * <pre>
+   * class-levels:
+   *   warrior: 10
+   *   mage: 8
+   *   archer: 12
+   * </pre>
+   */
+  record IntMap(
+      java.lang.String path,
+      java.util.Map<java.lang.String, Integer> value,
+      java.util.Map<java.lang.String, Integer> defaultValue,
+      java.lang.String comment,
+      Validator<java.util.Map<java.lang.String, Integer>> validator)
+      implements ConfigValue<java.util.Map<java.lang.String, Integer>> {
+
+    public IntMap(
+        java.lang.String path,
+        java.util.Map<java.lang.String, Integer> defaultValue) {
+      this(path, defaultValue, defaultValue, null, Validator.none());
+    }
+
+    public IntMap(
+        java.lang.String path,
+        java.util.Map<java.lang.String, Integer> defaultValue,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, Validator.none());
+    }
+
+    public IntMap(
+        java.lang.String path,
+        java.util.Map<java.lang.String, Integer> defaultValue,
+        Validator<java.util.Map<java.lang.String, Integer>> validator,
+        java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, validator);
+    }
+
+    @Override
+    public ConfigValue<java.util.Map<java.lang.String, Integer>> withValue(
+        java.util.Map<java.lang.String, Integer> newValue) {
+      return new IntMap(path, newValue, defaultValue, comment, validator);
     }
 
     @Override

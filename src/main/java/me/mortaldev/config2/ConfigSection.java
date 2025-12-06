@@ -1,5 +1,8 @@
 package me.mortaldev.config2;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * A view of a config with a path prefix.
  * Useful for organizing related configuration values.
@@ -52,17 +55,22 @@ public interface ConfigSection {
   /**
    * Gets a string list.
    */
-  java.util.List<String> getStringList(String relativePath);
+  List<String> getStringList(String relativePath);
 
   /**
    * Gets an integer list.
    */
-  java.util.List<Integer> getIntList(String relativePath);
+  List<Integer> getIntList(String relativePath);
 
   /**
    * Gets a double list.
    */
-  java.util.List<Double> getDoubleList(String relativePath);
+  List<Double> getDoubleList(String relativePath);
+
+  /**
+   * Gets a list of maps.
+   */
+  List<Map<String, Object>> getMapList(String relativePath);
 
   /**
    * Updates a value in this section.

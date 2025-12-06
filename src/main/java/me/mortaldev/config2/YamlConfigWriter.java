@@ -49,9 +49,12 @@ class YamlConfigWriter {
             writer.newLine();
           }
 
+          // Track written section headers to avoid duplicates
+          Set<String> writtenSections = new HashSet<>();
+
           // Write values
           for (ConfigValue<?> value : values) {
-            writeValue(writer, value, sectionKey);
+            writeValue(writer, value, sectionKey, writtenSections);
           }
         }
       }
@@ -88,6 +91,11 @@ class YamlConfigWriter {
       sections.computeIfAbsent(section, k -> new ArrayList<>()).add(value);
     }
 
+    // Sort values within each section by their full path to ensure proper nesting
+    for (List<ConfigValue<?>> values : sections.values()) {
+      values.sort(Comparator.comparing(ConfigValue::path));
+    }
+
     return sections;
   }
 
@@ -119,35 +127,88 @@ class YamlConfigWriter {
   /**
    * Writes a single config value.
    */
-  private static void writeValue(BufferedWriter writer, ConfigValue<?> value, String section)
+  private static void writeValue(BufferedWriter writer, ConfigValue<?> value, String section, Set<String> writtenSections)
       throws IOException {
     String relativePath = getRelativePath(value.path(), section);
     String[] parts = relativePath.split("\\.");
     int baseIndent = section.isEmpty() ? 0 : 1;
 
-    // Write nested structure
+    // Write nested structure, but only if not already written
+    StringBuilder sectionPath = new StringBuilder();
     for (int i = 0; i < parts.length - 1; i++) {
-      String indent = getIndent(baseIndent + i);
-      writer.write(indent + parts[i] + ":");
-      writer.newLine();
+      if (i > 0) {
+        sectionPath.append(".");
+      }
+      sectionPath.append(parts[i]);
+      String currentSection = sectionPath.toString();
+
+      // Only write the section header if we haven't written it yet
+      if (!writtenSections.contains(currentSection)) {
+        String indent = getIndent(baseIndent + i);
+        writer.write(indent + parts[i] + ":");
+        writer.newLine();
+        writtenSections.add(currentSection);
+      }
     }
 
     // Write the key-value pair with optional comment
     String indent = getIndent(baseIndent + parts.length - 1);
     String key = parts[parts.length - 1];
-    String valueStr = formatValue(value.value());
+    Object rawValue = value.value();
 
-    writer.write(indent + key + ": " + valueStr);
+    // Handle lists specially - use multi-line format for String and Map lists only
+    if (rawValue instanceof List<?> list && !list.isEmpty() && shouldUseMultilineFormat(list)) {
+      writer.write(indent + key + ":");
 
-    // Add inline comment if present
-    if (value.comment() != null && !value.comment().isEmpty()) {
-      int currentLength = indent.length() + key.length() + 2 + valueStr.length();
-      int targetColumn = 40; // Target column for comments
-      int padding = Math.max(2, targetColumn - currentLength);
-      writer.write(" ".repeat(padding) + "# " + value.comment());
+      // Add inline comment if present
+      if (value.comment() != null && !value.comment().isEmpty()) {
+        writer.write("  # " + value.comment());
+      }
+      writer.newLine();
+
+      // Write each list item on its own line
+      String listIndent = getIndent(baseIndent + parts.length);
+      for (Object item : list) {
+        writer.write(listIndent + "- " + formatValue(item));
+        writer.newLine();
+      }
+    } else {
+      // For non-list values and number lists, use inline format
+      String valueStr = formatValue(rawValue);
+      writer.write(indent + key + ": " + valueStr);
+
+      // Add inline comment if present
+      if (value.comment() != null && !value.comment().isEmpty()) {
+        int currentLength = indent.length() + key.length() + 2 + valueStr.length();
+        int targetColumn = 40; // Target column for comments
+        int padding = Math.max(2, targetColumn - currentLength);
+        writer.write(" ".repeat(padding) + "# " + value.comment());
+      }
+
+      writer.newLine();
+    }
+  }
+
+  /**
+   * Determines if a list should use multi-line format.
+   * String lists and Map lists use multi-line format.
+   * Number lists (Integer, Double) use inline format.
+   */
+  private static boolean shouldUseMultilineFormat(List<?> list) {
+    if (list.isEmpty()) {
+      return false;
     }
 
-    writer.newLine();
+    // Check the first element to determine the list type
+    Object first = list.get(0);
+
+    // String lists and Map lists use multi-line format
+    if (first instanceof String || first instanceof Map) {
+      return true;
+    }
+
+    // Number lists (Integer, Double, etc.) use inline format
+    return false;
   }
 
   /**
