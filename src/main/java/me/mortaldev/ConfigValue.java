@@ -3,8 +3,8 @@ package me.mortaldev;
 /**
  * Represents a configuration value with type-safe operations.
  *
- * <p>This class provides a wrapper around configuration values that maintains type information
- * at runtime, allowing for safe retrieval and storage of configuration data.
+ * <p>This class provides a wrapper around configuration values that maintains type information at
+ * runtime, allowing for safe retrieval and storage of configuration data.
  *
  * @param <T> the type of the configuration value
  */
@@ -42,43 +42,6 @@ public class ConfigValue<T> {
    */
   public ConfigValue(String id, Class<T> valueType, T defaultValue) {
     this(id, valueType, defaultValue, defaultValue);
-  }
-
-  /**
-   * Creates a new ConfigValue without explicit type information.
-   *
-   * @deprecated Use {@link #ConfigValue(String, Class, Object, Object)} instead to avoid type erasure issues.
-   * This constructor attempts to infer the type from the values, which may not work correctly
-   * for generic types like List&lt;String&gt;.
-   */
-  @Deprecated
-  public ConfigValue(String id, T value, T defaultValue) {
-    this.id = id;
-    this.value = value;
-    this.defaultValue = defaultValue;
-
-    // IMPROVEMENT: Determine the type from the value, falling back to the default value.
-    if (value != null) {
-      this.valueType = (Class<T>) value.getClass();
-    } else if (defaultValue != null) {
-      this.valueType = (Class<T>) defaultValue.getClass();
-    } else {
-      // This is an unrecoverable state for the generic helper.
-      throw new IllegalArgumentException(
-          "Cannot determine type for ConfigValue '"
-              + id
-              + "' because both the initial and default values are null.");
-    }
-  }
-
-  /**
-   * Creates a new ConfigValue without explicit type information.
-   *
-   * @deprecated Use {@link #ConfigValue(String, Class, Object)} instead.
-   */
-  @Deprecated
-  public ConfigValue(String id, T defaultValue) {
-    this(id, defaultValue, defaultValue);
   }
 
   public String getId() {
@@ -168,6 +131,12 @@ public class ConfigValue<T> {
 
   @Override
   public String toString() {
-    return "ConfigValue{id='" + id + "', value=" + value + ", type=" + valueType.getSimpleName() + "}";
+    return "ConfigValue{id='"
+        + id
+        + "', value="
+        + value
+        + ", type="
+        + valueType.getSimpleName()
+        + "}";
   }
 }

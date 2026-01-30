@@ -182,19 +182,6 @@ public abstract class AbstractConfig {
     return configValue;
   }
 
-  /**
-   * Gets the YAML utility instance with the main plugin set.
-   *
-   * @return the YAML instance
-   * @deprecated The YAML singleton pattern is deprecated. Consider using instance methods.
-   */
-  @Deprecated
-  public YAML getYAML() {
-    YAML instance = YAML.getInstance();
-    instance.setMain(getMain());
-    return instance;
-  }
-
   public String failedToLoad(String configName, String configValue) {
     return YAML.getInstance().failedToLoad(getMain(), configName, configValue);
   }
