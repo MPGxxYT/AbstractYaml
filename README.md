@@ -1,6 +1,55 @@
 # AbstractYaml
 
+[![](https://jitpack.io/v/MPGxxYT/AbstractYaml.svg)](https://jitpack.io/#MPGxxYT/AbstractYaml)
+
 A powerful, type-safe configuration library for Bukkit/Spigot plugins with validation, caching, and organized config management.
+
+## Installation
+
+### Maven (JitPack)
+
+Add the JitPack repository to your `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+Then add the dependency:
+
+```xml
+<dependency>
+    <groupId>com.github.MPGxxYT</groupId>
+    <artifactId>AbstractYaml</artifactId>
+    <version>v1.0.0</version>
+</dependency>
+```
+
+### Gradle (JitPack)
+
+```groovy
+repositories {
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'com.github.MPGxxYT:AbstractYaml:v1.0.0'
+}
+```
+
+### Development Builds
+
+For the latest development version:
+
+```xml
+<version>master-SNAPSHOT</version>
+```
+
+Note: SNAPSHOT versions may change without notice.
 
 ## Quick Start
 
