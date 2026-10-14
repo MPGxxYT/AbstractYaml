@@ -1,6 +1,44 @@
 # AbstractYaml Library - Changelog
 
-## Version 2.0 - Major Improvements
+## v2.0.0
+
+The schema API (`me.mortaldev.config2`) is now the recommended API. Plugins built on v1.0.0 compile unchanged; see the behaviour changes below.
+
+### Added
+- Annotation processor for `@GenerateWrapper`, bundled in the jar. Generates wrapper classes at compile time with Maven (`annotationProcessorPaths`) or Gradle (`annotationProcessor`); replaces the standalone generator.
+- `ConfigSource` with file and in-memory implementations; `ConfigLoader.builder()` without a plugin.
+- `ConfigView`, shared by `Config` and `ConfigSection`; nested sections (`section("a").section("b")`).
+- `getMap`, `getStringMap`, `getIntMap`.
+- `Config.toYaml()`.
+- Instance-based `ConfigManager`: `forPlugin`, `create`, `register`, `init(ConfigManager)`. `loadAll()` and `reloadAll()` return failures by name.
+- `boolValue` overload with a validator.
+- JUnit 5 test suite.
+- New README and guides in `docs/`.
+
+### Fixed
+- Map value types (`MapList`, `MapValue`, `StringMap`, `IntMap`) were never read from the file and were written as Java `toString()`.
+- Generated files followed hash order instead of declaration order.
+- Section `.header(...)` text was never written.
+- An explicit empty list in a file reverted to the default.
+- Default values were not validated on first run.
+- A failed reload left `get(name)` reporting "Unknown config"; it now keeps the previous values and reports the cause.
+- Legacy: a whole number for a `Double` value (and similar) was treated as invalid and the default was written over the file.
+- Legacy: the invalid value was cached after validation failed; cached values of the wrong type were cast unchecked.
+- Legacy: `regenerateConfigFile()` wrote defaults instead of current values.
+- Legacy: `ConfigValidator` threw after a failed rule (`ListValidators` on null lists, element casts); `oneOf` threw for non-String values.
+- Legacy: `YamlWriter` repeated parent keys for nested paths.
+
+### Changed
+- config2: an `int` value with a fraction (`10.7`) falls back to the default with a warning instead of being truncated.
+- config2: `Config.with(...)` rejects values it cannot convert.
+- `ConfigManager.init` throws if a registered schema cannot be created, instead of logging and failing later.
+- Generated wrappers read the current config on every call; `reload()` does nothing and is kept for compatibility.
+- Legacy API (`AbstractConfig`, `ConfigValue`, `ConfigValueContainer`, validators, `YamlWriter`) is deprecated. Validators report only the first failing rule. `YAML.reloadConfig` throws, as it never worked.
+
+### Removed
+- `ExampleConfig`, `ListExampleConfig` and `config2.example.*` from the library jar.
+
+## 2025-10-26 - Legacy API improvements (included in v1.0.0)
 
 ### 🐛 Bug Fixes
 
