@@ -23,6 +23,7 @@ public final class MyPlugin extends JavaPlugin {
 
 - `ConfigRegistry.register(Class)` checks that the class has `@RegisterConfig` and remembers it. Classes registered after `init` are added to the running manager straight away.
 - `ConfigManager.init(plugin)` creates the shared manager with files in the plugin's data folder and registers every class seen so far. It throws if a schema can't be created (for example, no public no-argument constructor), so mistakes show up at startup. Calling it twice throws.
+- `ConfigManager.init(manager)` installs a manager you built yourself (see below) as the shared one, for example in tests or to store files elsewhere. Classes passed to `ConfigRegistry.register(...)` are added to it too.
 - `ConfigManager.getInstance()` returns the shared manager, or throws if `init` has not run.
 
 ## Registration

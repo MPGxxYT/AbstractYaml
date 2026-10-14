@@ -32,7 +32,7 @@ public class MainSchema extends ConfigSchema {
 }
 ```
 
-The schema needs a public no-argument constructor. Keep one builder call per line: the optional [wrapper generator](generated-wrappers.md) reads schema source that way.
+The schema needs a public no-argument constructor. Use string literals or constants for keys if you plan to use [generated wrappers](generated-wrappers.md), which read the schema at compile time.
 
 ## 2. Register and load
 

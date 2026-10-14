@@ -85,13 +85,29 @@ public class ConfigManager {
     if (instance != null) {
       throw new IllegalStateException("ConfigManager already initialized");
     }
-    ConfigManager manager = forPlugin(plugin);
-    if (pending.isEmpty()) {
+    init(forPlugin(plugin));
+  }
+
+  /**
+   * Makes {@code manager} the shared instance and registers every schema class passed to
+   * {@link ConfigRegistry#register(Class)} that it does not already have. Use this in tests, or
+   * to choose where the shared manager stores its files.
+   *
+   * @throws IllegalStateException if already initialized
+   * @throws IllegalArgumentException if a registered schema cannot be created
+   */
+  public static synchronized void init(ConfigManager manager) {
+    if (instance != null) {
+      throw new IllegalStateException("ConfigManager already initialized");
+    }
+    if (pending.isEmpty() && manager.snapshot().isEmpty()) {
       manager.logger.warning(
           "No config schemas registered! Use ConfigRegistry.register() in a static block.");
     }
     for (Class<? extends ConfigSchema> schemaClass : pending) {
-      manager.register(schemaClass);
+      if (!manager.hasSchemaClass(schemaClass)) {
+        manager.register(schemaClass);
+      }
     }
     instance = manager;
   }
@@ -179,7 +195,7 @@ public class ConfigManager {
 
     ConfigLoader loader =
         ConfigLoader.builder().schema(schema).source(sources.apply(path)).logger(logger).build();
-    registrations.add(new Registration(name, path, priority, loader));
+    registrations.add(new Registration(name, path, priority, loader, schema.getClass()));
     // Stable sort: equal priorities keep registration order
     registrations.sort(Comparator.comparingInt(Registration::priority));
     logger.info("  Registered config: " + name + " at " + path + " (priority: " + priority + ")");
@@ -354,5 +370,15 @@ public class ConfigManager {
     return null;
   }
 
-  private record Registration(String name, String path, int priority, ConfigLoader loader) {}
+  private synchronized boolean hasSchemaClass(Class<? extends ConfigSchema> schemaClass) {
+    for (Registration registration : registrations) {
+      if (registration.schemaClass() == schemaClass) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private record Registration(
+      String name, String path, int priority, ConfigLoader loader, Class<?> schemaClass) {}
 }

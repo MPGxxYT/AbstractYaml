@@ -67,7 +67,7 @@ List<String> worlds = fireball.getStringList("worlds");
 - **Immutable configs.** A loaded `Config` never changes, so it is safe to read from async tasks. `with(...)` returns an updated copy.
 - **Load order and reloads.** `ConfigManager` loads configs by priority, reports which ones failed and why, and keeps the previous values when a reload fails.
 - **Testable without a server.** Configs can load from an in-memory string, with no `JavaPlugin` and no files.
-- **Optional generated wrappers.** A separate generator can turn a schema into static accessors such as `AbilitiesWrapper.Fireball.cooldown()`.
+- **Generated wrappers.** Add `@GenerateWrapper` and the bundled annotation processor turns a schema into static accessors such as `AbilitiesWrapper.Fireball.cooldown()` at compile time, with Maven or Gradle.
 
 ## Installation
 
@@ -168,7 +168,7 @@ Map<String, Exception> failures = ConfigManager.getInstance().reloadAll();
 | [Validation](docs/validation.md) | Built-in validators, combining them, and what happens when a value fails |
 | [ConfigManager](docs/config-manager.md) | Registration, priorities, file paths, failures and reloads |
 | [Testing](docs/testing.md) | Loading configs in unit tests without a server |
-| [Generated wrappers](docs/generated-wrappers.md) | Static accessor classes generated from schemas |
+| [Generated wrappers](docs/generated-wrappers.md) | Maven and Gradle setup for compile-time accessor classes |
 | [Migrating from the legacy API](docs/migrating-from-legacy.md) | Moving an `AbstractConfig` class to a schema |
 
 ### Legacy API
