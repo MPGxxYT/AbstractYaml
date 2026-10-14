@@ -1,6 +1,8 @@
 package me.mortaldev.config2;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,11 +28,13 @@ import java.util.Set;
 public abstract class ConfigSchema {
   private final String name;
   private final Map<String, ConfigValue<?>> values;
+  private final Map<String, String> sectionHeaders;
   private String fileHeader;
 
   protected ConfigSchema(String name) {
     this.name = name;
     this.values = new LinkedHashMap<>();
+    this.sectionHeaders = new LinkedHashMap<>();
   }
 
   /**
@@ -41,10 +45,10 @@ public abstract class ConfigSchema {
   }
 
   /**
-   * Returns all config values defined in this schema.
+   * Returns all config values defined in this schema, in declaration order.
    */
   public Set<ConfigValue<?>> values() {
-    return Set.copyOf(values.values());
+    return Collections.unmodifiableSet(new LinkedHashSet<>(values.values()));
   }
 
   /**
@@ -66,6 +70,16 @@ public abstract class ConfigSchema {
    */
   public String fileHeader() {
     return fileHeader;
+  }
+
+  /**
+   * Returns the header comment set on a section with {@code section(path).header(...)}, or
+   * {@code null} if none was set.
+   *
+   * @param sectionPath the full section path (e.g., "keraunos" or "scoring.rewards")
+   */
+  public String sectionHeader(String sectionPath) {
+    return sectionHeaders.get(sectionPath);
   }
 
   /**
@@ -95,7 +109,6 @@ public abstract class ConfigSchema {
    */
   protected class SectionBuilder {
     private final String prefix;
-    private String sectionHeader;
     private final SectionBuilder parent;
 
     private SectionBuilder(String prefix) {
@@ -111,7 +124,7 @@ public abstract class ConfigSchema {
      * Sets a header comment for this section.
      */
     public SectionBuilder header(String header) {
-      this.sectionHeader = header;
+      sectionHeaders.put(prefix, header);
       return this;
     }
 

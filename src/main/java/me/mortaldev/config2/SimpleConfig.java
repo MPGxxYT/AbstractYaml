@@ -1,6 +1,5 @@
 package me.mortaldev.config2;
 
-import java.io.File;
 import java.util.*;
 
 /** Simple immutable implementation of Config. */
@@ -10,7 +9,8 @@ class SimpleConfig implements Config {
 
   SimpleConfig(ConfigSchema schema, Map<String, ConfigValue<?>> values) {
     this.schema = schema;
-    this.values = Map.copyOf(values); // Immutable copy
+    // Immutable copy that keeps declaration order
+    this.values = Collections.unmodifiableMap(new LinkedHashMap<>(values));
   }
 
   @Override
@@ -126,7 +126,7 @@ class SimpleConfig implements Config {
           "Invalid value for " + path + ": " + validation.errorMessage());
     }
 
-    Map<String, ConfigValue<?>> newValues = new HashMap<>(values);
+    Map<String, ConfigValue<?>> newValues = new LinkedHashMap<>(values);
     newValues.put(path, updated);
     return new SimpleConfig(schema, newValues);
   }
@@ -150,11 +150,6 @@ class SimpleConfig implements Config {
       }
     }
     return errors.isEmpty() ? ValidationResult.valid() : ValidationResult.invalid(errors);
-  }
-
-  @Override
-  public void save(File file) {
-    YamlConfigWriter.write(this, file);
   }
 
   @Override

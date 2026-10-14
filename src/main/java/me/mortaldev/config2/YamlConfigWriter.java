@@ -1,166 +1,106 @@
 package me.mortaldev.config2;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * Writes configuration to YAML files with proper formatting and comments.
+ * Renders configuration as YAML text with proper formatting and comments.
  */
 class YamlConfigWriter {
   private static final int COMMENT_COLUMN = 40;
   private static final Pattern PLAIN_KEY = Pattern.compile("[A-Za-z0-9_-]+");
 
   /**
-   * Writes a config to a YAML file.
-   */
-  static void write(Config config, File file) {
-    try {
-      // Ensure parent directory exists
-      if (file.getParentFile() != null && !file.getParentFile().exists()) {
-        file.getParentFile().mkdirs();
-      }
-      Files.writeString(file.toPath(), render(config), StandardCharsets.UTF_8);
-    } catch (IOException e) {
-      throw new RuntimeException("Failed to write config to " + file, e);
-    }
-  }
-
-  /**
-   * Renders a config as YAML text.
+   * Renders a config as YAML text. Values appear in schema declaration order, nested under their
+   * sections, with section headers and value comments.
    */
   static String render(Config config) {
     StringBuilder out = new StringBuilder();
 
-    // Write file header if present
     String header = config.schema().fileHeader();
     if (header != null && !header.isEmpty()) {
-      writeHeader(out, header);
+      writeComment(out, 0, header);
       out.append('\n');
     }
 
-    // Group values by section
-    Map<String, List<ConfigValue<?>>> sections = groupBySection(config);
-
-    // Write each section
-    boolean first = true;
-    for (Map.Entry<String, List<ConfigValue<?>>> entry : sections.entrySet()) {
-      if (!first) {
-        out.append('\n'); // Blank line between sections
-      }
-      first = false;
-
-      String sectionKey = entry.getKey();
-      List<ConfigValue<?>> values = entry.getValue();
-
-      // Write section header if it's a nested section
-      if (!sectionKey.isEmpty()) {
-        out.append(key(sectionKey)).append(":\n");
-      }
-
-      // Track written section headers to avoid duplicates
-      Set<String> writtenSections = new HashSet<>();
-
-      // Write values
-      for (ConfigValue<?> value : values) {
-        writeValue(out, value, sectionKey, writtenSections);
-      }
+    Map<String, Object> tree = new LinkedHashMap<>();
+    for (ConfigValue<?> value : config.allValues().values()) {
+      insert(tree, value);
     }
+    writeSection(out, tree, 0, "", config.schema());
     return out.toString();
   }
 
   /**
-   * Writes the file header comment.
+   * Places a value in the tree; inner nodes are sections (maps), leaves are ConfigValues.
    */
-  private static void writeHeader(StringBuilder out, String header) {
-    for (String line : header.split("\n")) {
+  @SuppressWarnings("unchecked")
+  private static void insert(Map<String, Object> tree, ConfigValue<?> value) {
+    String[] parts = value.path().split("\\.");
+    Map<String, Object> node = tree;
+    for (int i = 0; i < parts.length - 1; i++) {
+      Object child = node.computeIfAbsent(parts[i], k -> new LinkedHashMap<String, Object>());
+      if (!(child instanceof Map)) {
+        throw new IllegalStateException(
+            "Path " + value.path() + " is nested under a value, not a section");
+      }
+      node = (Map<String, Object>) child;
+    }
+    if (node.putIfAbsent(parts[parts.length - 1], value) != null) {
+      throw new IllegalStateException("Path " + value.path() + " is both a section and a value");
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void writeSection(
+      StringBuilder out, Map<String, Object> node, int level, String prefix, ConfigSchema schema) {
+    boolean first = true;
+    boolean previousWasSection = false;
+    for (Map.Entry<String, Object> entry : node.entrySet()) {
+      String key = entry.getKey();
+      String path = prefix.isEmpty() ? key : prefix + "." + key;
+      boolean isSection = entry.getValue() instanceof Map;
+
+      // Blank line around top-level sections
+      if (level == 0 && !first && (isSection || previousWasSection)) {
+        out.append('\n');
+      }
+      first = false;
+      previousWasSection = isSection;
+
+      if (isSection) {
+        String sectionHeader = schema.sectionHeader(path);
+        if (sectionHeader != null && !sectionHeader.isEmpty()) {
+          writeComment(out, level, sectionHeader);
+        }
+        out.append(getIndent(level)).append(key(key)).append(":\n");
+        writeSection(out, (Map<String, Object>) entry.getValue(), level + 1, path, schema);
+      } else {
+        ConfigValue<?> value = (ConfigValue<?>) entry.getValue();
+        try {
+          writeEntry(out, level, key, value.value(), value.comment());
+        } catch (IllegalArgumentException e) {
+          throw new IllegalArgumentException(
+              "Cannot write " + value.path() + ": " + e.getMessage(), e);
+        }
+      }
+    }
+  }
+
+  /**
+   * Writes comment lines, prefixing "# " unless a line already starts with "#".
+   */
+  private static void writeComment(StringBuilder out, int level, String text) {
+    for (String line : text.split("\n")) {
+      out.append(getIndent(level));
       if (line.trim().isEmpty()) {
         out.append("#");
       } else if (line.trim().startsWith("#")) {
-        out.append(line);
+        out.append(line.trim());
       } else {
         out.append("# ").append(line);
       }
       out.append('\n');
-    }
-  }
-
-  /**
-   * Groups config values by their top-level section.
-   */
-  private static Map<String, List<ConfigValue<?>>> groupBySection(Config config) {
-    Map<String, List<ConfigValue<?>>> sections = new LinkedHashMap<>();
-
-    for (ConfigValue<?> value : config.allValues().values()) {
-      String section = getTopLevelSection(value.path());
-      sections.computeIfAbsent(section, k -> new ArrayList<>()).add(value);
-    }
-
-    // Sort values within each section by their full path to ensure proper nesting
-    for (List<ConfigValue<?>> values : sections.values()) {
-      values.sort(Comparator.comparing(ConfigValue::path));
-    }
-
-    return sections;
-  }
-
-  /**
-   * Gets the top-level section from a path.
-   * For example, "keraunos.cooldown" returns "keraunos", "simple" returns "".
-   */
-  private static String getTopLevelSection(String path) {
-    int dotIndex = path.indexOf('.');
-    if (dotIndex == -1) {
-      return "";
-    }
-    return path.substring(0, dotIndex);
-  }
-
-  /**
-   * Gets the relative path after removing the section prefix.
-   */
-  private static String getRelativePath(String path, String section) {
-    if (section.isEmpty()) {
-      return path;
-    }
-    if (path.startsWith(section + ".")) {
-      return path.substring(section.length() + 1);
-    }
-    return path;
-  }
-
-  /**
-   * Writes a single config value.
-   */
-  private static void writeValue(
-      StringBuilder out, ConfigValue<?> value, String section, Set<String> writtenSections) {
-    String relativePath = getRelativePath(value.path(), section);
-    String[] parts = relativePath.split("\\.");
-    int baseIndent = section.isEmpty() ? 0 : 1;
-
-    // Write nested structure, but only if not already written
-    StringBuilder sectionPath = new StringBuilder();
-    for (int i = 0; i < parts.length - 1; i++) {
-      if (i > 0) {
-        sectionPath.append(".");
-      }
-      sectionPath.append(parts[i]);
-      String currentSection = sectionPath.toString();
-
-      // Only write the section header if we haven't written it yet
-      if (writtenSections.add(currentSection)) {
-        out.append(getIndent(baseIndent + i)).append(key(parts[i])).append(":\n");
-      }
-    }
-
-    String key = parts[parts.length - 1];
-    try {
-      writeEntry(out, baseIndent + parts.length - 1, key, value.value(), value.comment());
-    } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("Cannot write " + value.path() + ": " + e.getMessage(), e);
     }
   }
 

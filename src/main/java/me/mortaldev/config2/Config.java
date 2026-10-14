@@ -176,11 +176,20 @@ public interface Config {
   ValidationResult validate();
 
   /**
+   * Renders this configuration as YAML text, with the schema's comments, in declaration order.
+   */
+  default String toYaml() {
+    return YamlConfigWriter.render(this);
+  }
+
+  /**
    * Saves this configuration to a file.
    *
    * @param file the file to save to
    */
-  void save(File file);
+  default void save(File file) {
+    ConfigSource.file(file).write(toYaml());
+  }
 
   /**
    * Creates a section view of this config with a path prefix.
