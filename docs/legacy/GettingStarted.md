@@ -334,10 +334,6 @@ config.reload(); // Clears cache and reloads
 4. **Use singleton pattern** - Easy access from anywhere
 5. **Log validation failures** - Helps debug config issues
 
-## Complete Working Example
-
-See [ExampleConfig.java](../../src/main/java/me/mortaldev/ExampleConfig.java) for a complete, working reference implementation.
-
 ## Summary
 
 Creating a config requires:

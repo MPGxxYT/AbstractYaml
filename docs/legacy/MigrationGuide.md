@@ -232,7 +232,7 @@ After migration, verify:
 ## Need Help?
 
 If you encounter issues during migration:
-1. Check the `ExampleConfig.java` for reference implementation
+1. Compare with the complete example in [Getting Started](GettingStarted.md)
 2. Review validation rules - they may be too strict
 3. Enable debug logging to see detailed error messages
 4. Check console warnings for specific config values failing validation
