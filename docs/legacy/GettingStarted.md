@@ -336,7 +336,7 @@ config.reload(); // Clears cache and reloads
 
 ## Complete Working Example
 
-See [ExampleConfig.java](../src/main/java/me/mortaldev/ExampleConfig.java) for a complete, working reference implementation.
+See [ExampleConfig.java](../../src/main/java/me/mortaldev/ExampleConfig.java) for a complete, working reference implementation.
 
 ## Summary
 

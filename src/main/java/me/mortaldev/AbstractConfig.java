@@ -24,7 +24,7 @@ import java.util.logging.Logger;
  *
  * @deprecated Part of the legacy config system, kept for existing plugins. New code should use
  *     {@code me.mortaldev.config2}: a {@code ConfigSchema} subclass registered with
- *     {@code ConfigManager}. See {@code config2/MIGRATION_GUIDE.md}.
+ *     {@code ConfigManager}. See {@code docs/migrating-from-legacy.md}.
  */
 @Deprecated
 public abstract class AbstractConfig {
