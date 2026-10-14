@@ -1,13 +1,8 @@
 package me.mortaldev.config2;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * Registry for manually registering ConfigSchema classes.
- *
- * <p>This allows you to explicitly register which schemas should be loaded
- * by the ConfigManager without needing classpath scanning or external dependencies.
+ * Registers schema classes with the shared {@link ConfigManager} from a static block, before
+ * {@link ConfigManager#init} runs.
  *
  * <p>Usage in your Main class:
  * <pre>{@code
@@ -17,9 +12,13 @@ import java.util.List;
  *     ConfigRegistry.register(UltimateConfigSchema.class);
  * }
  * }</pre>
+ *
+ * <p>Classes registered after {@code init} are added to the running manager immediately.
+ * Code that builds its own manager can call {@link ConfigManager#register(Class)} instead.
  */
-public class ConfigRegistry {
-  private static final List<Class<? extends ConfigSchema>> schemas = new ArrayList<>();
+public final class ConfigRegistry {
+
+  private ConfigRegistry() {}
 
   /**
    * Registers a ConfigSchema class for automatic loading.
@@ -30,20 +29,7 @@ public class ConfigRegistry {
    * @throws IllegalArgumentException if the class is not annotated with @RegisterConfig
    */
   public static void register(Class<? extends ConfigSchema> schemaClass) {
-    if (!schemaClass.isAnnotationPresent(RegisterConfig.class)) {
-      throw new IllegalArgumentException(
-          "Schema class " + schemaClass.getName() + " must be annotated with @RegisterConfig");
-    }
-    schemas.add(schemaClass);
-  }
-
-  /**
-   * Gets all registered schema classes.
-   *
-   * @return immutable list of registered schemas
-   */
-  static List<Class<? extends ConfigSchema>> getRegistered() {
-    return List.copyOf(schemas);
+    ConfigManager.registerShared(schemaClass);
   }
 
   /**
@@ -51,7 +37,7 @@ public class ConfigRegistry {
    * Useful for testing.
    */
   public static void clear() {
-    schemas.clear();
+    ConfigManager.clearShared();
   }
 
   /**
@@ -60,6 +46,6 @@ public class ConfigRegistry {
    * @return count of registered schemas
    */
   public static int count() {
-    return schemas.size();
+    return ConfigManager.countShared();
   }
 }
