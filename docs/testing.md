@@ -70,9 +70,18 @@ assertEquals(Set.of("shop"), manager.reloadAll().keySet());
 assertEquals(0.05, manager.get("shop").getDouble("shop.tax")); // previous values kept
 ```
 
-If code under test calls `ConfigManager.getInstance()`, clear the shared state after each test:
+If code under test calls `ConfigManager.getInstance()`, for example through [generated wrappers](generated-wrappers.md), install your manager as the shared one with `ConfigManager.init(manager)`. It also registers any classes passed to `ConfigRegistry.register(...)`. Clear the shared state after each test:
 
 ```java
+@BeforeEach
+void installConfigs() {
+  ConfigManager manager = ConfigManager.create(
+      Logger.getLogger("test"), path -> ConfigSource.inMemory(null));
+  manager.register(ShopSchema.class);
+  ConfigManager.init(manager);
+  manager.loadAll();
+}
+
 @AfterEach
 void resetConfigs() {
   ConfigManager.reset();

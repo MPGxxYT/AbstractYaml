@@ -6,15 +6,16 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Generates a type-safe wrapper class for accessing config values.
+ * Generates a class of static, typed accessors for a schema at compile time.
  *
- * <p>When applied to a ConfigSchema, an annotation processor will automatically
- * generate a companion wrapper class with static methods for type-safe access.
+ * <p>The annotation processor shipped in AbstractYaml reads the schema's constructor and writes
+ * the wrapper into the build's generated sources. Enable it by adding AbstractYaml to the
+ * compiler's annotation processor path (see {@code docs/generated-wrappers.md}).
  *
  * <p><b>Example:</b>
  * <pre>{@code
  * @RegisterConfig(priority = 10)
- * @GenerateWrapper  // ← Add this
+ * @GenerateWrapper
  * public class AbilitiesConfigSchema extends ConfigSchema {
  *     public AbilitiesConfigSchema() {
  *         super("abilities");
@@ -26,60 +27,47 @@ import java.lang.annotation.Target;
  * }
  * }</pre>
  *
- * <p><b>Generates:</b>
+ * <p>generates {@code wrappers.AbilitiesWrapper}, used as:
  * <pre>{@code
- * public class Abilities {
- *     public static class Keraunos {
- *         public static int cooldown() { ... }
- *         public static double radius() { ... }
- *     }
- * }
+ * int cooldown = AbilitiesWrapper.Keraunos.cooldown();
+ * double radius = AbilitiesWrapper.Keraunos.radius();
  * }</pre>
  *
- * <p><b>Usage:</b>
- * <pre>{@code
- * int cooldown = Abilities.Keraunos.cooldown();
- * double radius = Abilities.Keraunos.radius();
- * }</pre>
+ * <p>Accessors read the config loaded by the shared {@link ConfigManager} on each call, so they
+ * always reflect the latest reload. If a class with the wrapper's name already exists in the
+ * sources (for example a hand-edited copy), it is left alone and nothing is generated.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface GenerateWrapper {
 
   /**
-   * The name of the generated wrapper class.
+   * The simple name of the generated class.
    *
-   * <p>If not specified, removes "Schema" or "ConfigSchema" suffix from the schema class name.
-   *
-   * <p>Examples:
+   * <p>If empty, the schema class name with a trailing {@code ConfigSchema} or {@code Schema}
+   * replaced by {@code Wrapper}:
    * <ul>
-   *   <li>AbilitiesConfigSchema → Abilities</li>
-   *   <li>CTFSchema → CTF</li>
-   *   <li>PhaseConfigSchema → Phase</li>
+   *   <li>AbilitiesConfigSchema → AbilitiesWrapper</li>
+   *   <li>CTFSchema → CTFWrapper</li>
    * </ul>
    */
   String value() default "";
 
   /**
-   * The package for the generated wrapper class.
+   * The package of the generated class.
    *
-   * <p>If not specified, uses the same package as the schema class.
+   * <p>If empty, a {@code wrappers} package inside the schema's package.
    */
   String packageName() default "";
 
   /**
-   * Whether to generate reload methods.
-   *
-   * <p>If true, adds static reload() methods to clear cached sections.
-   *
-   * <p>Default: true
+   * Whether to generate a {@code reload()} method. Accessors never cache, so the method does
+   * nothing; it exists so code written for earlier wrappers still compiles.
    */
   boolean generateReload() default true;
 
   /**
-   * Whether to make the wrapper class final.
-   *
-   * <p>Default: true (recommended to prevent inheritance)
+   * Whether the generated class is {@code final}.
    */
   boolean makeFinal() default true;
 }

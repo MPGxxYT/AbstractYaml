@@ -1,14 +1,63 @@
 # Generated wrappers
 
-String paths are easy to mistype, and a typo only shows up when the line runs. A wrapper generator can turn a schema into a class of static accessors, so a typo becomes a compile error:
+String paths are easy to mistype, and a typo only shows up when the line runs. AbstractYaml includes an annotation processor that turns a schema into a class of static accessors at compile time, so a typo becomes a compile error and your IDE can autocomplete config values:
 
 ```java
-int cooldown = config.getInt("fireball.cooldwon");  // fails at runtime
-int cooldown = AbilitiesWrapper.Fireball.cooldown(); // checked by the compiler
+int cooldown = config.getInt("fireball.cooldwon");    // fails at runtime
+int cooldown = AbilitiesWrapper.Fireball.cooldown();   // checked by the compiler
 ```
 
+## Setup
+
+The processor ships in the AbstractYaml jar. Add the library to the compiler's annotation processor path as well as your dependencies.
+
+### Maven
+
+```xml
+<build>
+  <plugins>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-compiler-plugin</artifactId>
+      <version>3.13.0</version>
+      <configuration>
+        <annotationProcessorPaths>
+          <path>
+            <groupId>com.github.MPGxxYT</groupId>
+            <artifactId>AbstractYaml</artifactId>
+            <version>TAG</version>
+          </path>
+        </annotationProcessorPaths>
+      </configuration>
+    </plugin>
+  </plugins>
+</build>
+```
+
+Wrappers are written to `target/generated-sources/annotations`, which Maven and IntelliJ add to the build automatically.
+
 > [!NOTE]
-> The generator is a separate project, `config-wrapper-maven-plugin`, and is not published yet. You need a local copy to use it.
+> On JDK 21 and older, javac also finds the processor on the normal classpath, so builds work without `annotationProcessorPaths`. From JDK 23, javac only runs processors that are configured explicitly. If you already list other processors (Lombok, for example), add AbstractYaml to the same `annotationProcessorPaths` block.
+
+### Gradle
+
+```groovy
+dependencies {
+  implementation 'com.github.MPGxxYT:AbstractYaml:TAG'
+  annotationProcessor 'com.github.MPGxxYT:AbstractYaml:TAG'
+}
+```
+
+Kotlin DSL:
+
+```kotlin
+dependencies {
+  implementation("com.github.MPGxxYT:AbstractYaml:TAG")
+  annotationProcessor("com.github.MPGxxYT:AbstractYaml:TAG")
+}
+```
+
+Wrappers are written to `build/generated/sources/annotationProcessor/java/main`.
 
 ## Marking a schema
 
@@ -23,84 +72,70 @@ public class AbilitiesConfigSchema extends ConfigSchema {
 
     section("fireball")
         .intValue("cooldown", 10, Validator.range(1, 300), "Seconds between casts")
-        .doubleValue("radius", 3.0, "Explosion radius in blocks");
+        .doubleValue("radius", 3.0, "Explosion radius in blocks")
+        .section("damage")
+        .intMapValue("by-mob", Map.of("zombie", 4), "Damage per mob type");
   }
 }
 ```
 
-The generator reads the schema's source text rather than running it, so:
-
-- keep one builder call per line, as in the example;
-- write the config name as a string literal in `super("...")`;
-- use `.section(...)` and `.parent()` for nesting, as described in [Schemas](schemas.md#sections).
-
-## Running the generator
-
-Build the generator once, then point it at your plugin's project folder:
-
-```bash
-cd config-wrapper-maven-plugin
-mvn compile
-java -cp target/classes me.mortaldev.maven.config.SourceBasedWrapperGenerator /path/to/MyPlugin
-```
-
-It scans `src/main/java` for classes annotated with `@GenerateWrapper` and writes one wrapper per schema:
-
-- the class name drops `ConfigSchema` or `Schema` and adds `Wrapper` (`AbilitiesConfigSchema` becomes `AbilitiesWrapper`);
-- the wrapper goes in a `wrappers` package next to the schema (`com.example.config.wrappers`);
-- a wrapper newer than its schema is skipped, so run the generator again after editing a schema.
-
-Commit the generated files with your plugin's source. They are plain Java and compile like any other class.
-
-> [!IMPORTANT]
-> The options on `@GenerateWrapper` (`value`, `packageName`, `generateReload`, `makeFinal`) are not read by the current generator. Names and packages always follow the rules above.
-
-## What gets generated
-
-For the schema above:
+The next build generates `com.example.config.wrappers.AbilitiesWrapper`:
 
 ```java
-public final class AbilitiesWrapper {
-    private static final String CONFIG_NAME = "abilities";
-
-    public static class Fireball {
-        private static ConfigSection section;
-
-        public static int cooldown() {
-            return section().getInt("cooldown");
-        }
-
-        public static double radius() {
-            return section().getDouble("radius");
-        }
-
-        private static ConfigSection section() {
-            if (section == null) {
-                section = ConfigManager.getInstance().getSection(CONFIG_NAME, "fireball");
-            }
-            return section;
-        }
-
-        static void reload() {
-            section = null;
-        }
-    }
-
-    public static void reload() {
-        Fireball.reload();
-    }
-}
+int cooldown = AbilitiesWrapper.Fireball.cooldown();
+double radius = AbilitiesWrapper.Fireball.radius();
+Map<String, Integer> damage = AbilitiesWrapper.Fireball.Damage.byMob();
 ```
 
-Nested sections become nested classes: `ScoringWrapper.Scoring.Rewards.CaptureFlag.coins()`.
+Wrappers are regenerated on every build, so they always match the schema. Don't commit them and don't edit them.
 
-## Reloading
+## How schemas are read
 
-Wrappers cache the section they read from. After reloading a config, clear that cache:
+The processor reads the schema's constructor from the source code instead of running it. It understands:
+
+- `super("name")`, or the `value` of `@RegisterConfig` when set;
+- `section(...)`, nested `.section(...)`, `.parent()` and `.header(...)`;
+- every value method (`intValue`, `stringListValue`, `intMapValue`, ...);
+- `value(new ConfigValue.Int("path", ...))` for top-level values;
+- section builders stored in local variables (`SectionBuilder rewards = section("rewards");`).
+
+Keys and section names must be string literals or `static final String` constants. A key built at runtime is reported as a compile error at that line. Calls spread over several lines are fine.
+
+## Naming
+
+| From | Becomes |
+| --- | --- |
+| Schema class `AbilitiesConfigSchema` or `AbilitiesSchema` | `AbilitiesWrapper` in a `wrappers` package next to the schema |
+| Section `capture-flag` | nested class `CaptureFlag` |
+| Key `allow-block-breaking` | method `allowBlockBreaking()` |
+| Key `class`, `2x` | `class_()`, `_2x()` |
+| Section with the same name as its parent | class name with `Section` appended |
+
+Two keys in the same section that give the same method name (`max-hp` and `max_hp`) are reported as a compile error.
+
+## Options
 
 ```java
-ConfigManager.getInstance().reload("abilities");
-AbilitiesWrapper.reload();
+@GenerateWrapper(
+    value = "AbilitySettings",           // class name (default: <Name>Wrapper)
+    packageName = "com.example.api",     // package (default: <schema package>.wrappers)
+    makeFinal = false,                   // default: true
+    generateReload = false)              // default: true
 ```
 
-Wrappers use the shared `ConfigManager`, so `ConfigManager.init(...)` and `loadAll()` must have run before the first call.
+## Behaviour
+
+- Accessors read the config loaded by the shared `ConfigManager` on every call, so they always reflect the latest reload. `ConfigManager.init(...)` and `loadAll()` must have run before the first call.
+- The generated `reload()` method does nothing. It exists so code written for earlier, caching wrappers still compiles.
+- If a class with the wrapper's name already exists in your sources, the processor leaves it alone and prints a note. This keeps hand-written or customised wrappers working. Delete the file to switch to the generated one.
+
+> [!TIP]
+> Wrappers use the shared manager, so tests that call them need one. Build a manager with in-memory sources and install it with `ConfigManager.init(manager)`; see [Testing](testing.md#testing-code-that-uses-configmanager).
+
+## Moving from the standalone generator
+
+Earlier versions used a separate `SourceBasedWrapperGenerator` tool that wrote wrappers into `src/main/java`. To switch:
+
+1. Add the processor setup above to your build.
+2. Delete the wrapper files it generated (the `wrappers` packages). Keep any you edited by hand; the processor skips classes that already exist.
+3. Build. Method and class names follow the same rules as before, so calling code compiles unchanged.
