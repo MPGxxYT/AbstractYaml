@@ -85,7 +85,7 @@ AbstractYaml is published through [JitPack](https://jitpack.io/#MPGxxYT/Abstract
   <dependency>
     <groupId>com.github.MPGxxYT</groupId>
     <artifactId>AbstractYaml</artifactId>
-    <version>TAG</version>
+    <version>v2.0.0</version>
   </dependency>
 </dependencies>
 ```
@@ -98,17 +98,17 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.MPGxxYT:AbstractYaml:TAG'
+  implementation 'com.github.MPGxxYT:AbstractYaml:v2.0.0'
 }
 ```
 
-Replace `TAG` with a release tag, a commit hash, or `master-SNAPSHOT`.
+Other [releases](https://github.com/MPGxxYT/AbstractYaml/releases) are listed on GitHub; `master-SNAPSHOT` builds the latest commit. To generate [wrapper classes](docs/generated-wrappers.md), also add the library to the annotation processor path.
 
 > [!NOTE]
 > The library is not a plugin: it has no `plugin.yml`. Shade it into your plugin jar (for example with `maven-shade-plugin`) and relocate `me.mortaldev` if several plugins on the same server bundle different versions.
 
 > [!IMPORTANT]
-> `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters and the instance-based `ConfigManager` described in these docs. Use a newer tag or a snapshot.
+> These docs describe v2.0.0. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## Quick start
 
