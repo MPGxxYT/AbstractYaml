@@ -42,69 +42,6 @@ class SimpleConfig implements Config {
   }
 
   @Override
-  public int getInt(String path) {
-    return typed(path, ConfigValue.Int.class, "an integer");
-  }
-
-  @Override
-  public double getDouble(String path) {
-    return typed(path, ConfigValue.Double.class, "a double");
-  }
-
-  @Override
-  public String getString(String path) {
-    return typed(path, ConfigValue.String.class, "a string");
-  }
-
-  @Override
-  public boolean getBoolean(String path) {
-    return typed(path, ConfigValue.Boolean.class, "a boolean");
-  }
-
-  @Override
-  public List<String> getStringList(String path) {
-    return typed(path, ConfigValue.StringList.class, "a string list");
-  }
-
-  @Override
-  public List<Integer> getIntList(String path) {
-    return typed(path, ConfigValue.IntList.class, "an integer list");
-  }
-
-  @Override
-  public List<Double> getDoubleList(String path) {
-    return typed(path, ConfigValue.DoubleList.class, "a double list");
-  }
-
-  @Override
-  public List<Map<String, Object>> getMapList(String path) {
-    return typed(path, ConfigValue.MapList.class, "a map list");
-  }
-
-  @Override
-  public Map<String, Object> getMap(String path) {
-    return typed(path, ConfigValue.MapValue.class, "a map");
-  }
-
-  @Override
-  public Map<String, String> getStringMap(String path) {
-    return typed(path, ConfigValue.StringMap.class, "a string map");
-  }
-
-  @Override
-  public Map<String, Integer> getIntMap(String path) {
-    return typed(path, ConfigValue.IntMap.class, "an integer map");
-  }
-
-  private <R, V extends ConfigValue<R>> R typed(String path, Class<V> kind, String description) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!kind.isInstance(value)) {
-      throw new IllegalArgumentException("Value at " + path + " is not " + description);
-    }
-    return kind.cast(value).value();
-  }
-
-  @Override
   public Map<String, ConfigValue<?>> allValues() {
     return values;
   }
@@ -157,25 +94,8 @@ class SimpleConfig implements Config {
     return new SimpleConfigSection(this, prefix);
   }
 
-  /** Simple implementation of ConfigSection. */
-  private static class SimpleConfigSection implements ConfigSection {
-    private final Config config;
-    private final String prefix;
-
-    SimpleConfigSection(Config config, String prefix) {
-      this.config = config;
-      this.prefix = prefix;
-    }
-
-    @Override
-    public String prefix() {
-      return prefix;
-    }
-
-    @Override
-    public Config config() {
-      return config;
-    }
+  /** A prefix-scoped view of a SimpleConfig. */
+  private record SimpleConfigSection(Config config, String prefix) implements ConfigSection {
 
     private String fullPath(String relativePath) {
       return prefix + "." + relativePath;
@@ -187,58 +107,18 @@ class SimpleConfig implements Config {
     }
 
     @Override
-    public int getInt(String relativePath) {
-      return config.getInt(fullPath(relativePath));
+    public <T> ConfigValue<T> getOrThrow(String relativePath) {
+      return config.getOrThrow(fullPath(relativePath));
     }
 
     @Override
-    public double getDouble(String relativePath) {
-      return config.getDouble(fullPath(relativePath));
+    public <T> Optional<T> getValue(String relativePath) {
+      return config.getValue(fullPath(relativePath));
     }
 
     @Override
-    public String getString(String relativePath) {
-      return config.getString(fullPath(relativePath));
-    }
-
-    @Override
-    public boolean getBoolean(String relativePath) {
-      return config.getBoolean(fullPath(relativePath));
-    }
-
-    @Override
-    public List<String> getStringList(String relativePath) {
-      return config.getStringList(fullPath(relativePath));
-    }
-
-    @Override
-    public List<Integer> getIntList(String relativePath) {
-      return config.getIntList(fullPath(relativePath));
-    }
-
-    @Override
-    public List<Double> getDoubleList(String relativePath) {
-      return config.getDoubleList(fullPath(relativePath));
-    }
-
-    @Override
-    public List<Map<String, Object>> getMapList(String relativePath) {
-      return config.getMapList(fullPath(relativePath));
-    }
-
-    @Override
-    public Map<String, Object> getMap(String relativePath) {
-      return config.getMap(fullPath(relativePath));
-    }
-
-    @Override
-    public Map<String, String> getStringMap(String relativePath) {
-      return config.getStringMap(fullPath(relativePath));
-    }
-
-    @Override
-    public Map<String, Integer> getIntMap(String relativePath) {
-      return config.getIntMap(fullPath(relativePath));
+    public ConfigSection section(String relativePrefix) {
+      return new SimpleConfigSection(config, fullPath(relativePrefix));
     }
 
     @Override

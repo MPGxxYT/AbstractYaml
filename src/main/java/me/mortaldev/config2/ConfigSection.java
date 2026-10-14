@@ -1,8 +1,5 @@
 package me.mortaldev.config2;
 
-import java.util.List;
-import java.util.Map;
-
 /**
  * A view of a config with a path prefix.
  * Useful for organizing related configuration values.
@@ -12,80 +9,30 @@ import java.util.Map;
  * ConfigSection keraunos = config.section("keraunos");
  * int cooldown = keraunos.getInt("cooldown");  // Accesses "keraunos.cooldown"
  * double radius = keraunos.getDouble("radius");  // Accesses "keraunos.radius"
+ * ConfigSection rewards = config.section("scoring").section("rewards");
  * }</pre>
+ *
+ * <p>Typed getters come from {@link ConfigView}; paths are relative to {@link #prefix()}.
  */
-public interface ConfigSection {
+public interface ConfigSection extends ConfigView {
 
   /**
-   * The path prefix for this section.
+   * The full path prefix for this section (e.g., "scoring.rewards").
    */
   String prefix();
 
   /**
-   * The parent config.
+   * The config this section belongs to.
    */
   Config config();
 
   /**
    * Gets a value from this section.
    * The prefix is automatically prepended to the path.
+   *
+   * @throws IllegalArgumentException if the path doesn't exist
    */
   <T> ConfigValue<T> get(String relativePath);
-
-  /**
-   * Gets an integer value.
-   */
-  int getInt(String relativePath);
-
-  /**
-   * Gets a double value.
-   */
-  double getDouble(String relativePath);
-
-  /**
-   * Gets a string value.
-   */
-  String getString(String relativePath);
-
-  /**
-   * Gets a boolean value.
-   */
-  boolean getBoolean(String relativePath);
-
-  /**
-   * Gets a string list.
-   */
-  List<String> getStringList(String relativePath);
-
-  /**
-   * Gets an integer list.
-   */
-  List<Integer> getIntList(String relativePath);
-
-  /**
-   * Gets a double list.
-   */
-  List<Double> getDoubleList(String relativePath);
-
-  /**
-   * Gets a list of maps.
-   */
-  List<Map<String, Object>> getMapList(String relativePath);
-
-  /**
-   * Gets a map with values of any YAML type.
-   */
-  Map<String, Object> getMap(String relativePath);
-
-  /**
-   * Gets a string-to-string map.
-   */
-  Map<String, String> getStringMap(String relativePath);
-
-  /**
-   * Gets a string-to-integer map.
-   */
-  Map<String, Integer> getIntMap(String relativePath);
 
   /**
    * Updates a value in this section.
