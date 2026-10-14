@@ -41,7 +41,12 @@ package me.mortaldev;
  *     public DebugContainer getDebug() { return debug; }
  * }
  * }</pre>
+ *
+ * @deprecated Part of the legacy config system. In {@code me.mortaldev.config2}, declare
+ *     sections in the schema with {@code section("debug")} and read them with
+ *     {@code config.section("debug")}.
  */
+@Deprecated
 public abstract class ConfigValueContainer {
     protected final AbstractConfig config;
     protected final String pathPrefix;

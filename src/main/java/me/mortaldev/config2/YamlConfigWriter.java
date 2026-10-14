@@ -1,59 +1,94 @@
 package me.mortaldev.config2;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
  * Renders configuration as YAML text with proper formatting and comments.
+ *
+ * <p>Both config systems write through this class: config2 via {@link Config#toYaml()}, and the
+ * legacy {@code me.mortaldev.YamlWriter} via {@link #render(String, Function, List)}.
  */
-class YamlConfigWriter {
+public final class YamlConfigWriter {
   private static final int COMMENT_COLUMN = 40;
   private static final Pattern PLAIN_KEY = Pattern.compile("[A-Za-z0-9_-]+");
+
+  private YamlConfigWriter() {}
+
+  /**
+   * One value to write: a dotted path, plain YAML data (String, Number, Boolean, List, Map),
+   * and an optional inline comment.
+   */
+  public record Entry(String path, Object value, String comment) {}
 
   /**
    * Renders a config as YAML text. Values appear in schema declaration order, nested under their
    * sections, with section headers and value comments.
    */
   static String render(Config config) {
+    List<Entry> entries = new ArrayList<>();
+    for (ConfigValue<?> value : config.allValues().values()) {
+      entries.add(new Entry(value.path(), value.value(), value.comment()));
+    }
+    ConfigSchema schema = config.schema();
+    return render(schema.fileHeader(), schema::sectionHeader, entries);
+  }
+
+  /**
+   * Renders entries as YAML text, in the given order, nested by their dotted paths.
+   *
+   * @param fileHeader comment written at the top of the file, or {@code null}
+   * @param sectionHeaders returns the comment to write above a section (by full section path),
+   *     or {@code null} for none
+   * @param entries the values to write
+   * @throws IllegalArgumentException if a value is not plain YAML data
+   * @throws IllegalStateException if one path is used as both a value and a section
+   */
+  public static String render(
+      String fileHeader, Function<String, String> sectionHeaders, List<Entry> entries) {
     StringBuilder out = new StringBuilder();
 
-    String header = config.schema().fileHeader();
-    if (header != null && !header.isEmpty()) {
-      writeComment(out, 0, header);
+    if (fileHeader != null && !fileHeader.isEmpty()) {
+      writeComment(out, 0, fileHeader);
       out.append('\n');
     }
 
     Map<String, Object> tree = new LinkedHashMap<>();
-    for (ConfigValue<?> value : config.allValues().values()) {
-      insert(tree, value);
+    for (Entry entry : entries) {
+      insert(tree, entry);
     }
-    writeSection(out, tree, 0, "", config.schema());
+    writeSection(out, tree, 0, "", sectionHeaders);
     return out.toString();
   }
 
   /**
-   * Places a value in the tree; inner nodes are sections (maps), leaves are ConfigValues.
+   * Places an entry in the tree; inner nodes are sections (maps), leaves are entries.
    */
   @SuppressWarnings("unchecked")
-  private static void insert(Map<String, Object> tree, ConfigValue<?> value) {
-    String[] parts = value.path().split("\\.");
+  private static void insert(Map<String, Object> tree, Entry entry) {
+    String[] parts = entry.path().split("\\.");
     Map<String, Object> node = tree;
     for (int i = 0; i < parts.length - 1; i++) {
       Object child = node.computeIfAbsent(parts[i], k -> new LinkedHashMap<String, Object>());
       if (!(child instanceof Map)) {
         throw new IllegalStateException(
-            "Path " + value.path() + " is nested under a value, not a section");
+            "Path " + entry.path() + " is nested under a value, not a section");
       }
       node = (Map<String, Object>) child;
     }
-    if (node.putIfAbsent(parts[parts.length - 1], value) != null) {
-      throw new IllegalStateException("Path " + value.path() + " is both a section and a value");
+    if (node.putIfAbsent(parts[parts.length - 1], entry) != null) {
+      throw new IllegalStateException("Path " + entry.path() + " is used twice");
     }
   }
 
   @SuppressWarnings("unchecked")
   private static void writeSection(
-      StringBuilder out, Map<String, Object> node, int level, String prefix, ConfigSchema schema) {
+      StringBuilder out,
+      Map<String, Object> node,
+      int level,
+      String prefix,
+      Function<String, String> sectionHeaders) {
     boolean first = true;
     boolean previousWasSection = false;
     for (Map.Entry<String, Object> entry : node.entrySet()) {
@@ -69,14 +104,14 @@ class YamlConfigWriter {
       previousWasSection = isSection;
 
       if (isSection) {
-        String sectionHeader = schema.sectionHeader(path);
+        String sectionHeader = sectionHeaders.apply(path);
         if (sectionHeader != null && !sectionHeader.isEmpty()) {
           writeComment(out, level, sectionHeader);
         }
         out.append(getIndent(level)).append(key(key)).append(":\n");
-        writeSection(out, (Map<String, Object>) entry.getValue(), level + 1, path, schema);
+        writeSection(out, (Map<String, Object>) entry.getValue(), level + 1, path, sectionHeaders);
       } else {
-        ConfigValue<?> value = (ConfigValue<?>) entry.getValue();
+        Entry value = (Entry) entry.getValue();
         try {
           writeEntry(out, level, key, value.value(), value.comment());
         } catch (IllegalArgumentException e) {

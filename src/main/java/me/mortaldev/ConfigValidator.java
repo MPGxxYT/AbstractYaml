@@ -1,15 +1,19 @@
 package me.mortaldev;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Provides validation functionality for configuration values.
  *
  * @param <T> the type of value to validate
+ * @deprecated Part of the legacy config system. Use {@code me.mortaldev.config2.Validator}.
  */
+@Deprecated
 public class ConfigValidator<T> {
   private final List<ValidationRule<T>> rules = new ArrayList<>();
 
@@ -26,19 +30,20 @@ public class ConfigValidator<T> {
   }
 
   /**
-   * Validates the given value against all rules.
+   * Validates the given value against the rules in the order they were added, stopping at the
+   * first rule that fails. Later rules can therefore rely on earlier ones (for example, a size
+   * rule after {@link #notNull()}, or a cast after an element-type rule).
    *
    * @param value the value to validate
-   * @return a ValidationResult containing any errors
+   * @return a ValidationResult containing the first error, if any
    */
   public ValidationResult validate(T value) {
-    List<String> errors = new ArrayList<>();
     for (ValidationRule<T> rule : rules) {
       if (!rule.predicate().test(value)) {
-        errors.add(rule.errorMessage());
+        return new ValidationResult(false, List.of(rule.errorMessage()));
       }
     }
-    return new ValidationResult(errors.isEmpty(), errors);
+    return new ValidationResult(true, List.of());
   }
 
   /**
@@ -124,7 +129,8 @@ public class ConfigValidator<T> {
               }
               return false;
             },
-            "Value must be one of: " + String.join(", ", (CharSequence[]) allowedValues));
+            "Value must be one of: "
+                + Arrays.stream(allowedValues).map(String::valueOf).collect(Collectors.joining(", ")));
   }
 
   /**
