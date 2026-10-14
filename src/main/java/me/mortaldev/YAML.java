@@ -1,9 +1,7 @@
 package me.mortaldev;
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
-import java.util.Objects;
 
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -131,16 +129,17 @@ public class YAML {
     plugin.saveResource(config.getName(), false);
   }
 
+  /**
+   * Never worked: a {@link FileConfiguration} does not know which file it came from, so this
+   * method read from a path built from the in-file section path and then discarded the result.
+   *
+   * @deprecated Load the file again with {@link #getConfig(JavaPlugin, String)}.
+   * @throws UnsupportedOperationException always
+   */
+  @Deprecated
   public void reloadConfig(JavaPlugin plugin, FileConfiguration config) {
-    config = YamlConfiguration.loadConfiguration(new File(config.getCurrentPath()));
-    try (Reader stream =
-        new InputStreamReader(
-            Objects.requireNonNull(plugin.getResource(config.getName())), StandardCharsets.UTF_8)) {
-      YamlConfiguration defConfig = YamlConfiguration.loadConfiguration(stream);
-      config.setDefaults(defConfig);
-    } catch (IOException e) {
-      throw new ConfigurationException("Failed to reload config: " + config.getName(), e);
-    }
+    throw new UnsupportedOperationException(
+        "YAML.reloadConfig cannot locate the file; use YAML.getConfig(plugin, name) instead");
   }
 
   /**

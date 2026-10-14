@@ -1,6 +1,5 @@
 package me.mortaldev.config2;
 
-import java.io.File;
 import java.util.*;
 
 /** Simple immutable implementation of Config. */
@@ -10,7 +9,8 @@ class SimpleConfig implements Config {
 
   SimpleConfig(ConfigSchema schema, Map<String, ConfigValue<?>> values) {
     this.schema = schema;
-    this.values = Map.copyOf(values); // Immutable copy
+    // Immutable copy that keeps declaration order
+    this.values = Collections.unmodifiableMap(new LinkedHashMap<>(values));
   }
 
   @Override
@@ -42,88 +42,19 @@ class SimpleConfig implements Config {
   }
 
   @Override
-  public int getInt(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.Int)) {
-      throw new IllegalArgumentException("Value at " + path + " is not an integer");
-    }
-    return ((ConfigValue.Int) value).value();
-  }
-
-  @Override
-  public double getDouble(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.Double)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a double");
-    }
-    return ((ConfigValue.Double) value).value();
-  }
-
-  @Override
-  public String getString(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.String)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a string");
-    }
-    return ((ConfigValue.String) value).value();
-  }
-
-  @Override
-  public boolean getBoolean(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.Boolean)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a boolean");
-    }
-    return ((ConfigValue.Boolean) value).value();
-  }
-
-  @Override
-  public List<String> getStringList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.StringList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a string list");
-    }
-    return ((ConfigValue.StringList) value).value();
-  }
-
-  @Override
-  public List<Integer> getIntList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.IntList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not an integer list");
-    }
-    return ((ConfigValue.IntList) value).value();
-  }
-
-  @Override
-  public List<Double> getDoubleList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.DoubleList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a double list");
-    }
-    return ((ConfigValue.DoubleList) value).value();
-  }
-
-  @Override
-  public List<Map<String, Object>> getMapList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.MapList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a map list");
-    }
-    return ((ConfigValue.MapList) value).value();
-  }
-
-  @Override
   public Map<String, ConfigValue<?>> allValues() {
     return values;
   }
 
   @Override
-  @SuppressWarnings("unchecked")
   public <T> Config with(String path, T newValue) {
     ConfigValue<?> existing = getOrThrow(path);
-    ConfigValue<T> typedExisting = (ConfigValue<T>) existing;
-    ConfigValue<T> updated = typedExisting.withValue(newValue);
+    ConfigValue<?> updated;
+    try {
+      updated = existing.read(newValue);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("Invalid value for " + path + ": " + e.getMessage(), e);
+    }
 
     // Validate the new value
     ValidationResult validation = updated.validate();
@@ -132,7 +63,7 @@ class SimpleConfig implements Config {
           "Invalid value for " + path + ": " + validation.errorMessage());
     }
 
-    Map<String, ConfigValue<?>> newValues = new HashMap<>(values);
+    Map<String, ConfigValue<?>> newValues = new LinkedHashMap<>(values);
     newValues.put(path, updated);
     return new SimpleConfig(schema, newValues);
   }
@@ -159,34 +90,12 @@ class SimpleConfig implements Config {
   }
 
   @Override
-  public void save(File file) {
-    YamlConfigWriter.write(this, file);
-  }
-
-  @Override
   public ConfigSection section(String prefix) {
     return new SimpleConfigSection(this, prefix);
   }
 
-  /** Simple implementation of ConfigSection. */
-  private static class SimpleConfigSection implements ConfigSection {
-    private final Config config;
-    private final String prefix;
-
-    SimpleConfigSection(Config config, String prefix) {
-      this.config = config;
-      this.prefix = prefix;
-    }
-
-    @Override
-    public String prefix() {
-      return prefix;
-    }
-
-    @Override
-    public Config config() {
-      return config;
-    }
+  /** A prefix-scoped view of a SimpleConfig. */
+  private record SimpleConfigSection(Config config, String prefix) implements ConfigSection {
 
     private String fullPath(String relativePath) {
       return prefix + "." + relativePath;
@@ -198,43 +107,18 @@ class SimpleConfig implements Config {
     }
 
     @Override
-    public int getInt(String relativePath) {
-      return config.getInt(fullPath(relativePath));
+    public <T> ConfigValue<T> getOrThrow(String relativePath) {
+      return config.getOrThrow(fullPath(relativePath));
     }
 
     @Override
-    public double getDouble(String relativePath) {
-      return config.getDouble(fullPath(relativePath));
+    public <T> Optional<T> getValue(String relativePath) {
+      return config.getValue(fullPath(relativePath));
     }
 
     @Override
-    public String getString(String relativePath) {
-      return config.getString(fullPath(relativePath));
-    }
-
-    @Override
-    public boolean getBoolean(String relativePath) {
-      return config.getBoolean(fullPath(relativePath));
-    }
-
-    @Override
-    public List<String> getStringList(String relativePath) {
-      return config.getStringList(fullPath(relativePath));
-    }
-
-    @Override
-    public List<Integer> getIntList(String relativePath) {
-      return config.getIntList(fullPath(relativePath));
-    }
-
-    @Override
-    public List<Double> getDoubleList(String relativePath) {
-      return config.getDoubleList(fullPath(relativePath));
-    }
-
-    @Override
-    public List<Map<String, Object>> getMapList(String relativePath) {
-      return config.getMapList(fullPath(relativePath));
+    public ConfigSection section(String relativePrefix) {
+      return new SimpleConfigSection(config, fullPath(relativePrefix));
     }
 
     @Override

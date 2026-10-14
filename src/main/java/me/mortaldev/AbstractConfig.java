@@ -14,13 +14,19 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 /**
  * Abstract base class for configuration management with caching support.
  *
  * <p>This class provides a framework for loading, saving, and accessing configuration values
  * with built-in caching to reduce disk I/O operations.
+ *
+ * @deprecated Part of the legacy config system, kept for existing plugins. New code should use
+ *     {@code me.mortaldev.config2}: a {@code ConfigSchema} subclass registered with
+ *     {@code ConfigManager}. See {@code docs/migrating-from-legacy.md}.
  */
+@Deprecated
 public abstract class AbstractConfig {
   private static final String EXTENSION = ".yml";
   private FileConfiguration config;
@@ -115,71 +121,109 @@ public abstract class AbstractConfig {
     // Track this value for auto-generation
     trackedValues.put(path, configValue);
 
-    // Check cache first if enabled
-    if (cacheEnabled && valueCache.containsKey(path)) {
-      T cachedValue = (T) valueCache.get(path);
-      configValue.setValue(cachedValue);
-      return configValue;
+    // Check cache first if enabled; ignore entries of the wrong type
+    if (cacheEnabled) {
+      Object cached = valueCache.get(path);
+      if (valueType.isInstance(cached)) {
+        configValue.setValue(valueType.cast(cached));
+        return configValue;
+      }
     }
 
-    Object rawValue = config.get(path); // Get the raw value from the config
-
-    // --- Special handling for Maps from ConfigurationSections ---
+    Object rawValue = config.get(path, defaultValue);
     if (Map.class.isAssignableFrom(valueType) && rawValue instanceof ConfigurationSection section) {
       // The config has a section, and we expect a map. Convert it.
-      T mapValue = (T) section.getValues(false);
-      configValue.setValue(mapValue);
-      if (cacheEnabled) {
-        valueCache.put(path, mapValue);
-      }
-      return configValue;
+      rawValue = toMap(section);
     }
 
-    // --- Fallback to original logic for simple types (String, Integer, etc.) ---
-    Object value = config.get(path, defaultValue);
-
-    if (valueType.isInstance(value)) {
-      T typedValue = valueType.cast(value);
-      configValue.setValue(typedValue);
-
-      // Validate if a validator is set
-      ConfigValidator<T> validator = configValue.getValidator();
-      if (validator != null) {
-        ConfigValidator.ValidationResult result = validator.validate(typedValue);
-        if (!result.isValid()) {
-          getMain()
-              .getLogger()
-              .warning(
-                  "Config Value for '"
-                      + path
-                      + "' failed validation: "
-                      + result.getErrorMessage()
-                      + ". Setting to default: "
-                      + defaultValue);
-          configValue.setValue(defaultValue);
-          saveValue(configValue);
-        }
-      }
-
-      if (cacheEnabled) {
-        valueCache.put(path, typedValue);
-      }
-    } else {
-      getMain()
-          .getLogger()
+    T value = coerce(rawValue, valueType);
+    if (value == null) {
+      logger()
           .warning(
               "Config Value for '"
                   + path
                   + "' is invalid. Found type "
-                  + (value != null ? value.getClass().getSimpleName() : "null")
+                  + (rawValue != null ? rawValue.getClass().getSimpleName() : "null")
                   + " but expected "
                   + valueType.getSimpleName()
                   + ". Setting to default: "
-                  + configValue.getDefaultValue());
-      configValue.setValue(configValue.getDefaultValue());
+                  + defaultValue);
+      configValue.setValue(defaultValue);
       saveValue(configValue);
+    } else {
+      configValue.setValue(value);
+      ConfigValidator.ValidationResult result = configValue.validate();
+      if (!result.isValid()) {
+        logger()
+            .warning(
+                "Config Value for '"
+                    + path
+                    + "' failed validation: "
+                    + result.getErrorMessage()
+                    + ". Setting to default: "
+                    + defaultValue);
+        configValue.setValue(defaultValue);
+        saveValue(configValue);
+      }
+    }
+
+    if (cacheEnabled) {
+      valueCache.put(path, configValue.getValue());
     }
     return configValue;
+  }
+
+  /**
+   * Converts a raw YAML value to {@code type}, or returns {@code null} if it can't be done.
+   * Numbers convert between Integer, Long, Float and Double when no information is lost, so a
+   * YAML {@code 5} reads as a Double and {@code 5.0} reads as an Integer.
+   */
+  static <T> T coerce(Object raw, Class<T> type) {
+    if (raw == null) {
+      return null;
+    }
+    if (type.isInstance(raw)) {
+      return type.cast(raw);
+    }
+    if (!(raw instanceof Number number)) {
+      return null;
+    }
+    double d = number.doubleValue();
+    boolean whole = d == Math.rint(d) && !Double.isInfinite(d);
+    if (type == Double.class) {
+      return type.cast(d);
+    }
+    if (type == Float.class) {
+      return type.cast(number.floatValue());
+    }
+    if (type == Long.class && whole && d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
+      return type.cast(number.longValue());
+    }
+    if (type == Integer.class && whole && d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+      return type.cast(number.intValue());
+    }
+    return null;
+  }
+
+  /** Converts a section to nested plain maps, keeping key order. */
+  private static Map<String, Object> toMap(ConfigurationSection section) {
+    Map<String, Object> map = new LinkedHashMap<>();
+    for (String key : section.getKeys(false)) {
+      Object value = section.get(key);
+      map.put(key, value instanceof ConfigurationSection child ? toMap(child) : value);
+    }
+    return map;
+  }
+
+  private Logger logger() {
+    JavaPlugin main = getMain();
+    return main != null ? main.getLogger() : Logger.getLogger(getName());
+  }
+
+  /** Uses an already loaded configuration, for tests that run without a plugin. */
+  void useConfig(FileConfiguration config) {
+    this.config = config;
+    clearCache();
   }
 
   public String failedToLoad(String configName, String configValue) {
@@ -461,26 +505,15 @@ public abstract class AbstractConfig {
           headerComment = container.getHeaderComment();
         }
 
-        // Add first value with header comment
-        if (!values.isEmpty()) {
-          ConfigValue<?> firstValue = values.get(0);
+        // Current values; the first one in a container carries its header comment
+        for (int i = 0; i < values.size(); i++) {
+          ConfigValue<?> value = values.get(i);
           entries.add(new YamlWriter.YamlEntry(
-              firstValue.getId(),
-              firstValue.getDefaultValue(),
-              firstValue.getComment(),
-              headerComment
+              value.getId(),
+              value.getValue(),
+              value.getComment(),
+              i == 0 ? headerComment : null
           ));
-
-          // Add remaining values without header comment
-          for (int i = 1; i < values.size(); i++) {
-            ConfigValue<?> value = values.get(i);
-            entries.add(new YamlWriter.YamlEntry(
-                value.getId(),
-                value.getDefaultValue(),
-                value.getComment(),
-                null
-            ));
-          }
         }
       }
 
@@ -492,9 +525,11 @@ public abstract class AbstractConfig {
 
       getMain().getLogger().info("Generated config file: " + configFile.getName());
 
-    } catch (IOException e) {
-      getMain().getLogger().severe("Failed to generate config file: " + configFile.getName());
-      e.printStackTrace();
+    } catch (IOException | RuntimeException e) {
+      logger().log(
+          java.util.logging.Level.SEVERE,
+          "Failed to generate config file: " + configFile.getName(),
+          e);
     }
   }
 

@@ -1,149 +1,133 @@
 package me.mortaldev.config2;
 
-import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Loads configuration files from disk.
+ * Loads configurations from a {@link ConfigSource}.
  * Supports auto-generation of missing files and validation.
  */
 public class ConfigLoader {
-  private final JavaPlugin plugin;
   private final ConfigSchema schema;
-  private final File file;
+  private final ConfigSource source;
   private final boolean autoGenerate;
   private final boolean validateOnLoad;
   private final Logger logger;
 
   private ConfigLoader(Builder builder) {
-    this.plugin = builder.plugin;
     this.schema = builder.schema;
-    this.file = builder.file;
+    this.source = builder.source;
     this.autoGenerate = builder.autoGenerate;
     this.validateOnLoad = builder.validateOnLoad;
-    this.logger = builder.logger != null ? builder.logger : plugin.getLogger();
+    this.logger = builder.logger;
   }
 
   /**
-   * Loads the configuration from disk.
-   * If the file doesn't exist and autoGenerate is true, it will be created with defaults.
+   * Loads the configuration.
+   * If nothing is stored yet and autoGenerate is true, the defaults are written.
    *
    * @return the loaded configuration
-   * @throws ConfigLoadException if loading fails
+   * @throws ConfigLoadException if validation fails
    */
   public Config load() {
-    // Create parent directory if needed
-    if (!file.getParentFile().exists()) {
-      file.getParentFile().mkdirs();
+    String text = source.read();
+
+    if (text == null) {
+      Config defaults = createDefaultConfig();
+      checkValid(defaults, "Default values of " + schema.name() + " fail validation");
+      if (autoGenerate) {
+        logger.info("Config file " + source.name() + " not found, generating with defaults...");
+        source.write(defaults.toYaml());
+      }
+      return defaults;
     }
 
-    // Auto-generate if file doesn't exist
-    if (!file.exists() && autoGenerate) {
-      logger.info("Config file " + file.getName() + " not found, generating with defaults...");
-      Config defaultConfig = createDefaultConfig();
-      defaultConfig.save(file);
-      return defaultConfig;
+    YamlConfiguration yaml = new YamlConfiguration();
+    try {
+      yaml.loadFromString(text);
+    } catch (InvalidConfigurationException e) {
+      logger.severe(
+          "Could not parse " + source.name() + ", using defaults: " + e.getMessage());
+      return createDefaultConfig();
     }
 
-    // Load from file
-    FileConfiguration yaml = YamlConfiguration.loadConfiguration(file);
-    Map<String, ConfigValue<?>> loadedValues = new HashMap<>();
-
-    // Load each value from the YAML file
+    Map<String, ConfigValue<?>> loadedValues = new LinkedHashMap<>();
     for (ConfigValue<?> schemaValue : schema.values()) {
       String path = schemaValue.path();
 
       if (!yaml.contains(path)) {
-        // Value missing from file, use default
         logger.warning(
-            "Config value '" + path + "' missing from " + file.getName() + ", using default");
+            "Config value '" + path + "' missing from " + source.name() + ", using default");
         loadedValues.put(path, schemaValue);
         continue;
       }
 
-      // Load value based on type
-      ConfigValue<?> loadedValue = loadValue(yaml, schemaValue);
-      loadedValues.put(path, loadedValue);
+      loadedValues.put(path, loadValue(yaml, schemaValue));
     }
 
     Config config = new SimpleConfig(schema, loadedValues);
-
-    // Validate if requested
-    if (validateOnLoad) {
-      ValidationResult validation = config.validate();
-      if (!validation.isValid()) {
-        throw new ConfigLoadException(
-            "Configuration validation failed for " + file.getName() + ":\n" +
-            String.join("\n", validation.errors()));
-      }
-    }
-
+    checkValid(config, "Configuration validation failed for " + source.name());
     return config;
+  }
+
+  private void checkValid(Config config, String message) {
+    if (!validateOnLoad) {
+      return;
+    }
+    ValidationResult validation = config.validate();
+    if (!validation.isValid()) {
+      throw new ConfigLoadException(message + ":\n" + String.join("\n", validation.errors()));
+    }
   }
 
   /**
    * Loads a specific value from the YAML configuration.
    */
-  @SuppressWarnings("unchecked")
-  private ConfigValue<?> loadValue(FileConfiguration yaml, ConfigValue<?> schemaValue) {
+  private ConfigValue<?> loadValue(YamlConfiguration yaml, ConfigValue<?> schemaValue) {
     String path = schemaValue.path();
-
     try {
-      if (schemaValue instanceof ConfigValue.Int intValue) {
-        int value = yaml.getInt(path, intValue.defaultValue());
-        return intValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.Double doubleValue) {
-        double value = yaml.getDouble(path, doubleValue.defaultValue());
-        return doubleValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.String stringValue) {
-        String value = yaml.getString(path, stringValue.defaultValue());
-        return stringValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.Boolean boolValue) {
-        boolean value = yaml.getBoolean(path, boolValue.defaultValue());
-        return boolValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.StringList listValue) {
-        List<String> value = yaml.getStringList(path);
-        if (value.isEmpty() && !listValue.defaultValue().isEmpty()) {
-          value = listValue.defaultValue();
-        }
-        return listValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.IntList listValue) {
-        List<Integer> value = yaml.getIntegerList(path);
-        if (value.isEmpty() && !listValue.defaultValue().isEmpty()) {
-          value = listValue.defaultValue();
-        }
-        return listValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.DoubleList listValue) {
-        List<Double> value = yaml.getDoubleList(path);
-        if (value.isEmpty() && !listValue.defaultValue().isEmpty()) {
-          value = listValue.defaultValue();
-        }
-        return listValue.withValue(value);
-      }
-    } catch (Exception e) {
+      return schemaValue.read(toPlain(yaml.get(path)));
+    } catch (IllegalArgumentException e) {
       logger.warning(
-          "Failed to load value '" + path + "' from " + file.getName() +
+          "Invalid value '" + path + "' in " + source.name() +
           ": " + e.getMessage() + ". Using default.");
       return schemaValue;
     }
+  }
 
-    return schemaValue;
+  /** Converts Bukkit's ConfigurationSection nodes into plain maps. */
+  private static Object toPlain(Object raw) {
+    if (raw instanceof ConfigurationSection section) {
+      Map<String, Object> map = new LinkedHashMap<>();
+      for (String key : section.getKeys(false)) {
+        map.put(key, toPlain(section.get(key)));
+      }
+      return map;
+    }
+    if (raw instanceof List<?> list) {
+      List<Object> copy = new ArrayList<>(list.size());
+      for (Object item : list) {
+        copy.add(toPlain(item));
+      }
+      return copy;
+    }
+    return raw;
   }
 
   /**
    * Creates a config with all default values.
    */
   private Config createDefaultConfig() {
-    Map<String, ConfigValue<?>> defaultValues = new HashMap<>();
+    Map<String, ConfigValue<?>> defaultValues = new LinkedHashMap<>();
     for (ConfigValue<?> value : schema.values()) {
       defaultValues.put(value.path(), value);
     }
@@ -151,23 +135,41 @@ public class ConfigLoader {
   }
 
   /**
-   * Reloads the configuration from disk.
+   * Reloads the configuration.
    * Returns a fresh config instance.
    */
   public Config reload() {
     return load();
   }
 
+  /**
+   * The source this loader reads from.
+   */
+  public ConfigSource source() {
+    return source;
+  }
+
   // ===== Builder =====
 
+  /**
+   * Creates a builder that resolves files and logging from a plugin.
+   */
   public static Builder builder(JavaPlugin plugin) {
     return new Builder(plugin);
+  }
+
+  /**
+   * Creates a builder without a plugin. Set a {@link Builder#source(ConfigSource) source} or an
+   * absolute {@link Builder#file(File) file}.
+   */
+  public static Builder builder() {
+    return new Builder(null);
   }
 
   public static class Builder {
     private final JavaPlugin plugin;
     private ConfigSchema schema;
-    private File file;
+    private ConfigSource source;
     private boolean autoGenerate = true;
     private boolean validateOnLoad = true;
     private Logger logger;
@@ -185,12 +187,19 @@ public class ConfigLoader {
     }
 
     /**
+     * Sets where the YAML text is read from and written to.
+     */
+    public Builder source(ConfigSource source) {
+      this.source = source;
+      return this;
+    }
+
+    /**
      * Sets the file to load from.
      * If not specified, uses plugin.getDataFolder() / schema.name() + ".yml"
      */
     public Builder file(File file) {
-      this.file = file;
-      return this;
+      return source(ConfigSource.file(file));
     }
 
     /**
@@ -200,8 +209,7 @@ public class ConfigLoader {
       if (!name.endsWith(".yml")) {
         name = name + ".yml";
       }
-      this.file = new File(plugin.getDataFolder(), name);
-      return this;
+      return file(new File(requirePlugin("file(String)").getDataFolder(), name));
     }
 
     /**
@@ -239,8 +247,11 @@ public class ConfigLoader {
       if (schema == null) {
         throw new IllegalStateException("Schema must be set");
       }
-      if (file == null) {
-        file = new File(plugin.getDataFolder(), schema.name() + ".yml");
+      if (source == null) {
+        file(new File(requirePlugin("a default file").getDataFolder(), schema.name() + ".yml"));
+      }
+      if (logger == null) {
+        logger = plugin != null ? plugin.getLogger() : Logger.getLogger(schema.name());
       }
       return new ConfigLoader(this);
     }
@@ -250,6 +261,14 @@ public class ConfigLoader {
      */
     public Config load() {
       return build().load();
+    }
+
+    private JavaPlugin requirePlugin(String feature) {
+      if (plugin == null) {
+        throw new IllegalStateException(
+            feature + " needs a plugin; use ConfigLoader.builder(plugin) or set a source");
+      }
+      return plugin;
     }
   }
 

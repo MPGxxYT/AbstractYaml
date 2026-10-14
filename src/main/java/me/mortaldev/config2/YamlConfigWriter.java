@@ -1,252 +1,246 @@
 package me.mortaldev.config2;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.*;
+import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /**
- * Writes configuration to YAML files with proper formatting and comments.
+ * Renders configuration as YAML text with proper formatting and comments.
+ *
+ * <p>Both config systems write through this class: config2 via {@link Config#toYaml()}, and the
+ * legacy {@code me.mortaldev.YamlWriter} via {@link #render(String, Function, List)}.
  */
-class YamlConfigWriter {
+public final class YamlConfigWriter {
+  private static final int COMMENT_COLUMN = 40;
+  private static final Pattern PLAIN_KEY = Pattern.compile("[A-Za-z0-9_-]+");
+
+  private YamlConfigWriter() {}
 
   /**
-   * Writes a config to a YAML file.
+   * One value to write: a dotted path, plain YAML data (String, Number, Boolean, List, Map),
+   * and an optional inline comment.
    */
-  static void write(Config config, File file) {
-    try {
-      // Ensure parent directory exists
-      if (!file.getParentFile().exists()) {
-        file.getParentFile().mkdirs();
-      }
-
-      try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-        // Write file header if present
-        String header = config.schema().fileHeader();
-        if (header != null && !header.isEmpty()) {
-          writeHeader(writer, header);
-          writer.newLine();
-        }
-
-        // Group values by section
-        Map<String, List<ConfigValue<?>>> sections = groupBySection(config);
-
-        // Write each section
-        boolean first = true;
-        for (Map.Entry<String, List<ConfigValue<?>>> entry : sections.entrySet()) {
-          if (!first) {
-            writer.newLine(); // Blank line between sections
-          }
-          first = false;
-
-          String sectionKey = entry.getKey();
-          List<ConfigValue<?>> values = entry.getValue();
-
-          // Write section header if it's a nested section
-          if (!sectionKey.isEmpty()) {
-            writer.write(sectionKey + ":");
-            writer.newLine();
-          }
-
-          // Track written section headers to avoid duplicates
-          Set<String> writtenSections = new HashSet<>();
-
-          // Write values
-          for (ConfigValue<?> value : values) {
-            writeValue(writer, value, sectionKey, writtenSections);
-          }
-        }
-      }
-    } catch (IOException e) {
-      throw new RuntimeException("Failed to write config to " + file, e);
-    }
-  }
+  public record Entry(String path, Object value, String comment) {}
 
   /**
-   * Writes the file header comment.
+   * Renders a config as YAML text. Values appear in schema declaration order, nested under their
+   * sections, with section headers and value comments.
    */
-  private static void writeHeader(BufferedWriter writer, String header) throws IOException {
-    String[] lines = header.split("\n");
-    for (String line : lines) {
-      if (line.trim().isEmpty()) {
-        writer.write("#");
-      } else if (line.trim().startsWith("#")) {
-        writer.write(line);
-      } else {
-        writer.write("# " + line);
-      }
-      writer.newLine();
-    }
-  }
-
-  /**
-   * Groups config values by their top-level section.
-   */
-  private static Map<String, List<ConfigValue<?>>> groupBySection(Config config) {
-    Map<String, List<ConfigValue<?>>> sections = new LinkedHashMap<>();
-
+  static String render(Config config) {
+    List<Entry> entries = new ArrayList<>();
     for (ConfigValue<?> value : config.allValues().values()) {
-      String section = getTopLevelSection(value.path());
-      sections.computeIfAbsent(section, k -> new ArrayList<>()).add(value);
+      entries.add(new Entry(value.path(), value.value(), value.comment()));
     }
-
-    // Sort values within each section by their full path to ensure proper nesting
-    for (List<ConfigValue<?>> values : sections.values()) {
-      values.sort(Comparator.comparing(ConfigValue::path));
-    }
-
-    return sections;
+    ConfigSchema schema = config.schema();
+    return render(schema.fileHeader(), schema::sectionHeader, entries);
   }
 
   /**
-   * Gets the top-level section from a path.
-   * For example, "keraunos.cooldown" returns "keraunos", "simple" returns "".
+   * Renders entries as YAML text, in the given order, nested by their dotted paths.
+   *
+   * @param fileHeader comment written at the top of the file, or {@code null}
+   * @param sectionHeaders returns the comment to write above a section (by full section path),
+   *     or {@code null} for none
+   * @param entries the values to write
+   * @throws IllegalArgumentException if a value is not plain YAML data
+   * @throws IllegalStateException if one path is used as both a value and a section
    */
-  private static String getTopLevelSection(String path) {
-    int dotIndex = path.indexOf('.');
-    if (dotIndex == -1) {
-      return "";
+  public static String render(
+      String fileHeader, Function<String, String> sectionHeaders, List<Entry> entries) {
+    StringBuilder out = new StringBuilder();
+
+    if (fileHeader != null && !fileHeader.isEmpty()) {
+      writeComment(out, 0, fileHeader);
+      out.append('\n');
     }
-    return path.substring(0, dotIndex);
+
+    Map<String, Object> tree = new LinkedHashMap<>();
+    for (Entry entry : entries) {
+      insert(tree, entry);
+    }
+    writeSection(out, tree, 0, "", sectionHeaders);
+    return out.toString();
   }
 
   /**
-   * Gets the relative path after removing the section prefix.
+   * Places an entry in the tree; inner nodes are sections (maps), leaves are entries.
    */
-  private static String getRelativePath(String path, String section) {
-    if (section.isEmpty()) {
-      return path;
-    }
-    if (path.startsWith(section + ".")) {
-      return path.substring(section.length() + 1);
-    }
-    return path;
-  }
-
-  /**
-   * Writes a single config value.
-   */
-  private static void writeValue(BufferedWriter writer, ConfigValue<?> value, String section, Set<String> writtenSections)
-      throws IOException {
-    String relativePath = getRelativePath(value.path(), section);
-    String[] parts = relativePath.split("\\.");
-    int baseIndent = section.isEmpty() ? 0 : 1;
-
-    // Write nested structure, but only if not already written
-    StringBuilder sectionPath = new StringBuilder();
+  @SuppressWarnings("unchecked")
+  private static void insert(Map<String, Object> tree, Entry entry) {
+    String[] parts = entry.path().split("\\.");
+    Map<String, Object> node = tree;
     for (int i = 0; i < parts.length - 1; i++) {
-      if (i > 0) {
-        sectionPath.append(".");
+      Object child = node.computeIfAbsent(parts[i], k -> new LinkedHashMap<String, Object>());
+      if (!(child instanceof Map)) {
+        throw new IllegalStateException(
+            "Path " + entry.path() + " is nested under a value, not a section");
       }
-      sectionPath.append(parts[i]);
-      String currentSection = sectionPath.toString();
+      node = (Map<String, Object>) child;
+    }
+    if (node.putIfAbsent(parts[parts.length - 1], entry) != null) {
+      throw new IllegalStateException("Path " + entry.path() + " is used twice");
+    }
+  }
 
-      // Only write the section header if we haven't written it yet
-      if (!writtenSections.contains(currentSection)) {
-        String indent = getIndent(baseIndent + i);
-        writer.write(indent + parts[i] + ":");
-        writer.newLine();
-        writtenSections.add(currentSection);
+  @SuppressWarnings("unchecked")
+  private static void writeSection(
+      StringBuilder out,
+      Map<String, Object> node,
+      int level,
+      String prefix,
+      Function<String, String> sectionHeaders) {
+    boolean first = true;
+    boolean previousWasSection = false;
+    for (Map.Entry<String, Object> entry : node.entrySet()) {
+      String key = entry.getKey();
+      String path = prefix.isEmpty() ? key : prefix + "." + key;
+      boolean isSection = entry.getValue() instanceof Map;
+
+      // Blank line around top-level sections
+      if (level == 0 && !first && (isSection || previousWasSection)) {
+        out.append('\n');
+      }
+      first = false;
+      previousWasSection = isSection;
+
+      if (isSection) {
+        String sectionHeader = sectionHeaders.apply(path);
+        if (sectionHeader != null && !sectionHeader.isEmpty()) {
+          writeComment(out, level, sectionHeader);
+        }
+        out.append(getIndent(level)).append(key(key)).append(":\n");
+        writeSection(out, (Map<String, Object>) entry.getValue(), level + 1, path, sectionHeaders);
+      } else {
+        Entry value = (Entry) entry.getValue();
+        try {
+          writeEntry(out, level, key, value.value(), value.comment());
+        } catch (IllegalArgumentException e) {
+          throw new IllegalArgumentException(
+              "Cannot write " + value.path() + ": " + e.getMessage(), e);
+        }
       }
     }
+  }
 
-    // Write the key-value pair with optional comment
-    String indent = getIndent(baseIndent + parts.length - 1);
-    String key = parts[parts.length - 1];
-    Object rawValue = value.value();
-
-    // Handle lists specially - use multi-line format for String and Map lists only
-    if (rawValue instanceof List<?> list && !list.isEmpty() && shouldUseMultilineFormat(list)) {
-      writer.write(indent + key + ":");
-
-      // Add inline comment if present
-      if (value.comment() != null && !value.comment().isEmpty()) {
-        writer.write("  # " + value.comment());
+  /**
+   * Writes comment lines, prefixing "# " unless a line already starts with "#".
+   */
+  private static void writeComment(StringBuilder out, int level, String text) {
+    for (String line : text.split("\n")) {
+      out.append(getIndent(level));
+      if (line.trim().isEmpty()) {
+        out.append("#");
+      } else if (line.trim().startsWith("#")) {
+        out.append(line.trim());
+      } else {
+        out.append("# ").append(line);
       }
-      writer.newLine();
+      out.append('\n');
+    }
+  }
 
-      // Write each list item on its own line
-      String listIndent = getIndent(baseIndent + parts.length);
+  /**
+   * Writes {@code key: value}, using block style for non-empty maps and for lists of strings or
+   * maps, and inline style for everything else.
+   */
+  private static void writeEntry(
+      StringBuilder out, int level, String key, Object value, String comment) {
+    String indent = getIndent(level);
+    if (value instanceof Map<?, ?> map && !map.isEmpty()) {
+      out.append(indent).append(key(key)).append(':');
+      appendComment(out, comment, 2);
+      out.append('\n');
+      for (Map.Entry<?, ?> e : map.entrySet()) {
+        writeEntry(out, level + 1, String.valueOf(e.getKey()), e.getValue(), null);
+      }
+    } else if (value instanceof List<?> list && useBlockList(list)) {
+      out.append(indent).append(key(key)).append(':');
+      appendComment(out, comment, 2);
+      out.append('\n');
       for (Object item : list) {
-        writer.write(listIndent + "- " + formatValue(item));
-        writer.newLine();
+        writeListItem(out, level + 1, item);
       }
     } else {
-      // For non-list values and number lists, use inline format
-      String valueStr = formatValue(rawValue);
-      writer.write(indent + key + ": " + valueStr);
-
-      // Add inline comment if present
-      if (value.comment() != null && !value.comment().isEmpty()) {
-        int currentLength = indent.length() + key.length() + 2 + valueStr.length();
-        int targetColumn = 40; // Target column for comments
-        int padding = Math.max(2, targetColumn - currentLength);
-        writer.write(" ".repeat(padding) + "# " + value.comment());
-      }
-
-      writer.newLine();
+      String line = indent + key(key) + ": " + formatValue(value);
+      out.append(line);
+      appendComment(out, comment, Math.max(2, COMMENT_COLUMN - line.length()));
+      out.append('\n');
     }
   }
 
   /**
-   * Determines if a list should use multi-line format.
-   * String lists and Map lists use multi-line format.
-   * Number lists (Integer, Double) use inline format.
+   * Writes one block-list item. A map item puts its first entry on the dash line.
    */
-  private static boolean shouldUseMultilineFormat(List<?> list) {
-    if (list.isEmpty()) {
-      return false;
+  private static void writeListItem(StringBuilder out, int level, Object item) {
+    if (item instanceof Map<?, ?> map && !map.isEmpty()) {
+      StringBuilder entries = new StringBuilder();
+      for (Map.Entry<?, ?> e : map.entrySet()) {
+        writeEntry(entries, level + 1, String.valueOf(e.getKey()), e.getValue(), null);
+      }
+      // Replace the first entry's indent with "- " at this level
+      out.append(getIndent(level)).append("- ").append(entries, getIndent(level + 1).length(),
+          entries.length());
+    } else {
+      out.append(getIndent(level)).append("- ").append(formatValue(item)).append('\n');
     }
+  }
 
-    // Check the first element to determine the list type
-    Object first = list.get(0);
-
-    // String lists and Map lists use multi-line format
-    if (first instanceof String || first instanceof Map) {
-      return true;
+  private static void appendComment(StringBuilder out, String comment, int padding) {
+    if (comment != null && !comment.isEmpty()) {
+      out.append(" ".repeat(padding)).append("# ").append(comment);
     }
+  }
 
-    // Number lists (Integer, Double, etc.) use inline format
+  /**
+   * Lists of strings or maps use one item per line; number and boolean lists stay inline.
+   */
+  private static boolean useBlockList(List<?> list) {
+    for (Object item : list) {
+      if (item instanceof String || item instanceof Map || item instanceof List) {
+        return true;
+      }
+    }
     return false;
   }
 
   /**
-   * Formats a value for YAML output.
+   * Formats a value in YAML flow style.
    */
   private static String formatValue(Object value) {
     if (value == null) {
       return "null";
     }
     if (value instanceof String str) {
-      // Quote strings to avoid YAML parsing issues
-      return "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+      return quote(str);
     }
     if (value instanceof Boolean || value instanceof Number) {
       return value.toString();
     }
     if (value instanceof List<?> list) {
-      return formatList(list);
+      StringJoiner joiner = new StringJoiner(", ", "[", "]");
+      for (Object item : list) {
+        joiner.add(formatValue(item));
+      }
+      return joiner.toString();
     }
-    return value.toString();
+    if (value instanceof Map<?, ?> map) {
+      StringJoiner joiner = new StringJoiner(", ", "{", "}");
+      for (Map.Entry<?, ?> e : map.entrySet()) {
+        joiner.add(key(String.valueOf(e.getKey())) + ": " + formatValue(e.getValue()));
+      }
+      return joiner.toString();
+    }
+    throw new IllegalArgumentException(
+        "unsupported YAML type " + value.getClass().getName());
   }
 
-  /**
-   * Formats a list for YAML output.
-   */
-  private static String formatList(List<?> list) {
-    if (list.isEmpty()) {
-      return "[]";
-    }
-    StringBuilder sb = new StringBuilder("[");
-    for (int i = 0; i < list.size(); i++) {
-      if (i > 0) {
-        sb.append(", ");
-      }
-      sb.append(formatValue(list.get(i)));
-    }
-    sb.append("]");
-    return sb.toString();
+  /** Quotes strings to avoid YAML parsing issues. */
+  private static String quote(String str) {
+    return "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+  }
+
+  private static String key(String key) {
+    return PLAIN_KEY.matcher(key).matches() ? key : quote(key);
   }
 
   /**

@@ -5,7 +5,11 @@ import java.util.function.Predicate;
 
 /**
  * Helper class providing common validators for List-type ConfigValues.
+ *
+ * @deprecated Part of the legacy config system. Use the list validators on
+ *     {@code me.mortaldev.config2.Validator}.
  */
+@Deprecated
 public class ListValidators {
 
   /**

@@ -8,8 +8,11 @@ import java.util.Optional;
  * Immutable configuration container.
  * Config instances are thread-safe and cannot be modified after creation.
  * Use {@link #with(String, Object)} to create a new config with updated values.
+ *
+ * <p>Typed getters such as {@link #getInt(String)} come from {@link ConfigView}; paths are
+ * relative to the file root.
  */
-public interface Config {
+public interface Config extends ConfigView {
 
   /**
    * Returns the schema that defines this configuration.
@@ -30,96 +33,7 @@ public interface Config {
   <T> Optional<ConfigValue<T>> get(String path);
 
   /**
-   * Gets a configuration value by path, throwing an exception if not found.
-   *
-   * @param path the configuration path
-   * @return the config value
-   * @throws IllegalArgumentException if the path doesn't exist
-   */
-  <T> ConfigValue<T> getOrThrow(String path);
-
-  /**
-   * Gets just the value (not the ConfigValue wrapper) by path.
-   *
-   * @param path the configuration path
-   * @return the value, or empty if not found
-   */
-  <T> Optional<T> getValue(String path);
-
-  /**
-   * Gets an integer value.
-   *
-   * @param path the configuration path
-   * @return the integer value
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  int getInt(String path);
-
-  /**
-   * Gets a double value.
-   *
-   * @param path the configuration path
-   * @return the double value
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  double getDouble(String path);
-
-  /**
-   * Gets a string value.
-   *
-   * @param path the configuration path
-   * @return the string value
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  String getString(String path);
-
-  /**
-   * Gets a boolean value.
-   *
-   * @param path the configuration path
-   * @return the boolean value
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  boolean getBoolean(String path);
-
-  /**
-   * Gets a string list.
-   *
-   * @param path the configuration path
-   * @return the string list
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  java.util.List<String> getStringList(String path);
-
-  /**
-   * Gets an integer list.
-   *
-   * @param path the configuration path
-   * @return the integer list
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  java.util.List<Integer> getIntList(String path);
-
-  /**
-   * Gets a double list.
-   *
-   * @param path the configuration path
-   * @return the double list
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  java.util.List<Double> getDoubleList(String path);
-
-  /**
-   * Gets a list of maps.
-   *
-   * @param path the configuration path
-   * @return the list of maps
-   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
-   */
-  java.util.List<Map<String, Object>> getMapList(String path);
-
-  /**
-   * Returns all configuration values.
+   * Returns all configuration values, in schema declaration order.
    */
   Map<String, ConfigValue<?>> allValues();
 
@@ -128,8 +42,10 @@ public interface Config {
    * The original config is not modified.
    *
    * @param path the path to update
-   * @param newValue the new value
+   * @param newValue the new value, converted to the value's type
    * @return a new config with the updated value
+   * @throws IllegalArgumentException if the path doesn't exist, the value can't be converted,
+   *     or it fails validation
    */
   <T> Config with(String path, T newValue);
 
@@ -149,18 +65,18 @@ public interface Config {
   ValidationResult validate();
 
   /**
+   * Renders this configuration as YAML text, with the schema's comments, in declaration order.
+   */
+  default String toYaml() {
+    return YamlConfigWriter.render(this);
+  }
+
+  /**
    * Saves this configuration to a file.
    *
    * @param file the file to save to
    */
-  void save(File file);
-
-  /**
-   * Creates a section view of this config with a path prefix.
-   * This is useful for organizing related values.
-   *
-   * @param prefix the path prefix (e.g., "keraunos")
-   * @return a config section
-   */
-  ConfigSection section(String prefix);
+  default void save(File file) {
+    ConfigSource.file(file).write(toYaml());
+  }
 }

@@ -7,7 +7,9 @@ package me.mortaldev;
  * runtime, allowing for safe retrieval and storage of configuration data.
  *
  * @param <T> the type of the configuration value
+ * @deprecated Part of the legacy config system. Use {@code me.mortaldev.config2.ConfigValue}.
  */
+@Deprecated
 public class ConfigValue<T> {
   private final String id;
   private T value;

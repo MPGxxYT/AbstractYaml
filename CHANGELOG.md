@@ -180,7 +180,7 @@ This provides better IDE support while maintaining the same functionality.
 - [ ] Test loading and saving operations
 - [ ] Check performance improvements
 
-See **MIGRATION_GUIDE.md** for detailed instructions.
+See the [Migration Guide](docs/legacy/MigrationGuide.md) for detailed instructions.
 
 ---
 
@@ -202,7 +202,8 @@ Improvements based on:
 
 ### 🔗 Resources
 
-- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Get started quickly
-- [LIST_PATTERNS.md](LIST_PATTERNS.md) - Working with List types
-- [CONFIG_PATTERNS.md](CONFIG_PATTERNS.md) - JavaPlugin reference patterns
-- [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) - Upgrade from v1.0
+The guides for this version are now in [docs/legacy](docs/legacy/README.md):
+
+- [Getting Started](docs/legacy/GettingStarted.md) - Get started quickly
+- [Working with Lists](docs/legacy/WorkingWithLists.md) - Working with List types
+- [Migration Guide](docs/legacy/MigrationGuide.md) - Upgrade from v1.0

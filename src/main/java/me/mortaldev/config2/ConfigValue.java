@@ -1,8 +1,19 @@
 package me.mortaldev.config2;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
 /**
  * Base interface for all configuration values.
  * Provides type-safe access to configuration data without casting.
+ *
+ * <p>Each value type owns the conversion from plain YAML data (String, Number, Boolean, List,
+ * Map) to its own Java type through {@link #read(Object)}. Because the interface is sealed and
+ * {@code read} is abstract, a new value type cannot compile until it says how it is read.
  *
  * @param <T> the type of the configuration value
  */
@@ -51,9 +62,142 @@ public sealed interface ConfigValue<T> permits
   ConfigValue<T> withValue(T newValue);
 
   /**
+   * Creates a new ConfigValue holding {@code raw} converted to this value's type.
+   *
+   * <p>{@code raw} is plain YAML data as produced by a YAML parser: String, Number, Boolean,
+   * List or Map. Conversion is lenient where no information is lost (a whole {@code 5.0} reads
+   * as the int {@code 5}, a numeric string reads as a number) and strict otherwise.
+   *
+   * @throws IllegalArgumentException if {@code raw} cannot be converted to this type
+   */
+  ConfigValue<T> read(Object raw);
+
+  /**
    * Validates the current value.
    */
-  ValidationResult validate();
+  default ValidationResult validate() {
+    return validator().validate(value());
+  }
+
+  // ===== Conversion from plain YAML data =====
+
+  private static Integer toInt(Object raw) {
+    if (raw instanceof java.lang.String s) {
+      try {
+        raw = new java.math.BigDecimal(s.trim());
+      } catch (NumberFormatException e) {
+        throw mismatch("an integer", raw);
+      }
+    }
+    if (raw instanceof Integer i) {
+      return i;
+    }
+    if (raw instanceof Number n) {
+      double d = n.doubleValue();
+      if (d != Math.rint(d) || d < Integer.MIN_VALUE || d > Integer.MAX_VALUE) {
+        throw mismatch("an integer", raw);
+      }
+      return n.intValue();
+    }
+    throw mismatch("an integer", raw);
+  }
+
+  private static java.lang.Double toDouble(Object raw) {
+    if (raw instanceof Number n) {
+      return n.doubleValue();
+    }
+    if (raw instanceof java.lang.String s) {
+      try {
+        return java.lang.Double.parseDouble(s.trim());
+      } catch (NumberFormatException e) {
+        throw mismatch("a number", raw);
+      }
+    }
+    throw mismatch("a number", raw);
+  }
+
+  private static java.lang.String toStr(Object raw) {
+    if (raw instanceof java.lang.String
+        || raw instanceof Number
+        || raw instanceof java.lang.Boolean
+        || raw instanceof Character) {
+      return raw.toString();
+    }
+    throw mismatch("a string", raw);
+  }
+
+  private static java.lang.Boolean toBool(Object raw) {
+    if (raw instanceof java.lang.Boolean b) {
+      return b;
+    }
+    if (raw instanceof java.lang.String s) {
+      if (s.equalsIgnoreCase("true")) {
+        return true;
+      }
+      if (s.equalsIgnoreCase("false")) {
+        return false;
+      }
+    }
+    throw mismatch("true or false", raw);
+  }
+
+  private static <E> List<E> toList(Object raw, Function<Object, E> element) {
+    if (!(raw instanceof List<?> list)) {
+      throw mismatch("a list", raw);
+    }
+    List<E> result = new ArrayList<>(list.size());
+    for (int i = 0; i < list.size(); i++) {
+      try {
+        result.add(element.apply(list.get(i)));
+      } catch (IllegalArgumentException e) {
+        throw new IllegalArgumentException("element " + i + ": " + e.getMessage());
+      }
+    }
+    return Collections.unmodifiableList(result);
+  }
+
+  private static <V> Map<java.lang.String, V> toMap(Object raw, Function<Object, V> entry) {
+    if (!(raw instanceof Map<?, ?> map)) {
+      throw mismatch("a map", raw);
+    }
+    Map<java.lang.String, V> result = new LinkedHashMap<>();
+    for (Map.Entry<?, ?> e : map.entrySet()) {
+      java.lang.String key = java.lang.String.valueOf(e.getKey());
+      try {
+        result.put(key, entry.apply(e.getValue()));
+      } catch (IllegalArgumentException ex) {
+        throw new IllegalArgumentException("key '" + key + "': " + ex.getMessage());
+      }
+    }
+    return Collections.unmodifiableMap(result);
+  }
+
+  /** Copies nested YAML data, normalizing map keys to strings. */
+  private static Object toPlain(Object raw) {
+    if (raw instanceof Map<?, ?>) {
+      return toMap(raw, ConfigValue::toPlain);
+    }
+    if (raw instanceof List<?>) {
+      return toList(raw, ConfigValue::toPlain);
+    }
+    return raw;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<java.lang.String, Object> toPlainMap(Object raw) {
+    return (Map<java.lang.String, Object>) toMap(raw, ConfigValue::toPlain);
+  }
+
+  private static IllegalArgumentException mismatch(java.lang.String expected, Object raw) {
+    java.lang.String actual =
+        raw == null ? "nothing" : raw.getClass().getSimpleName() + " " + describe(raw);
+    return new IllegalArgumentException("expected " + expected + ", got " + actual);
+  }
+
+  private static java.lang.String describe(Object raw) {
+    java.lang.String text = raw instanceof java.lang.String ? "\"" + raw + "\"" : raw.toString();
+    return text.length() > 40 ? text.substring(0, 37) + "..." : text;
+  }
 
   // ===== Concrete Implementations =====
 
@@ -64,12 +208,16 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<java.lang.String> validator) implements ConfigValue<java.lang.String> {
 
+    public String {
+      validator = validator != null ? validator : Validator.none();
+    }
+
     public String(java.lang.String path, java.lang.String defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public String(java.lang.String path, java.lang.String defaultValue, java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public String(
@@ -77,7 +225,7 @@ public sealed interface ConfigValue<T> permits
         java.lang.String defaultValue,
         Validator<java.lang.String> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
@@ -86,8 +234,8 @@ public sealed interface ConfigValue<T> permits
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<java.lang.String> read(Object raw) {
+      return withValue(toStr(raw));
     }
   }
 
@@ -98,12 +246,16 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<Integer> validator) implements ConfigValue<Integer> {
 
+    public Int {
+      validator = validator != null ? validator : Validator.none();
+    }
+
     public Int(java.lang.String path, int defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public Int(java.lang.String path, int defaultValue, java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public Int(
@@ -111,7 +263,7 @@ public sealed interface ConfigValue<T> permits
         int defaultValue,
         Validator<Integer> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
@@ -120,8 +272,8 @@ public sealed interface ConfigValue<T> permits
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<Integer> read(Object raw) {
+      return withValue(toInt(raw));
     }
   }
 
@@ -132,12 +284,16 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<java.lang.Double> validator) implements ConfigValue<java.lang.Double> {
 
+    public Double {
+      validator = validator != null ? validator : Validator.none();
+    }
+
     public Double(java.lang.String path, double defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public Double(java.lang.String path, double defaultValue, java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public Double(
@@ -145,7 +301,7 @@ public sealed interface ConfigValue<T> permits
         double defaultValue,
         Validator<java.lang.Double> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
@@ -154,8 +310,8 @@ public sealed interface ConfigValue<T> permits
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<java.lang.Double> read(Object raw) {
+      return withValue(toDouble(raw));
     }
   }
 
@@ -166,12 +322,16 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<java.lang.Boolean> validator) implements ConfigValue<java.lang.Boolean> {
 
+    public Boolean {
+      validator = validator != null ? validator : Validator.none();
+    }
+
     public Boolean(java.lang.String path, boolean defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public Boolean(java.lang.String path, boolean defaultValue, java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public Boolean(
@@ -179,7 +339,7 @@ public sealed interface ConfigValue<T> permits
         boolean defaultValue,
         Validator<java.lang.Boolean> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
@@ -188,122 +348,127 @@ public sealed interface ConfigValue<T> permits
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<java.lang.Boolean> read(Object raw) {
+      return withValue(toBool(raw));
     }
   }
 
   record StringList(
       java.lang.String path,
-      java.util.List<java.lang.String> value,
-      java.util.List<java.lang.String> defaultValue,
+      List<java.lang.String> value,
+      List<java.lang.String> defaultValue,
       java.lang.String comment,
-      Validator<java.util.List<java.lang.String>> validator)
-      implements ConfigValue<java.util.List<java.lang.String>> {
+      Validator<List<java.lang.String>> validator)
+      implements ConfigValue<List<java.lang.String>> {
 
-    public StringList(java.lang.String path, java.util.List<java.lang.String> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public StringList {
+      validator = validator != null ? validator : Validator.none();
+    }
+
+    public StringList(java.lang.String path, List<java.lang.String> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
+    }
+
+    public StringList(
+        java.lang.String path, List<java.lang.String> defaultValue, java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public StringList(
         java.lang.String path,
-        java.util.List<java.lang.String> defaultValue,
+        List<java.lang.String> defaultValue,
+        Validator<List<java.lang.String>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
-    }
-
-    public StringList(
-        java.lang.String path,
-        java.util.List<java.lang.String> defaultValue,
-        Validator<java.util.List<java.lang.String>> validator,
-        java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.List<java.lang.String>> withValue(
-        java.util.List<java.lang.String> newValue) {
+    public ConfigValue<List<java.lang.String>> withValue(List<java.lang.String> newValue) {
       return new StringList(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<List<java.lang.String>> read(Object raw) {
+      return withValue(toList(raw, ConfigValue::toStr));
     }
   }
 
   record IntList(
       java.lang.String path,
-      java.util.List<Integer> value,
-      java.util.List<Integer> defaultValue,
+      List<Integer> value,
+      List<Integer> defaultValue,
       java.lang.String comment,
-      Validator<java.util.List<Integer>> validator)
-      implements ConfigValue<java.util.List<Integer>> {
+      Validator<List<Integer>> validator)
+      implements ConfigValue<List<Integer>> {
 
-    public IntList(java.lang.String path, java.util.List<Integer> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public IntList {
+      validator = validator != null ? validator : Validator.none();
     }
 
-    public IntList(
-        java.lang.String path, java.util.List<Integer> defaultValue, java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+    public IntList(java.lang.String path, List<Integer> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
+    }
+
+    public IntList(java.lang.String path, List<Integer> defaultValue, java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public IntList(
         java.lang.String path,
-        java.util.List<Integer> defaultValue,
-        Validator<java.util.List<Integer>> validator,
+        List<Integer> defaultValue,
+        Validator<List<Integer>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.List<Integer>> withValue(java.util.List<Integer> newValue) {
+    public ConfigValue<List<Integer>> withValue(List<Integer> newValue) {
       return new IntList(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<List<Integer>> read(Object raw) {
+      return withValue(toList(raw, ConfigValue::toInt));
     }
   }
 
   record DoubleList(
       java.lang.String path,
-      java.util.List<java.lang.Double> value,
-      java.util.List<java.lang.Double> defaultValue,
+      List<java.lang.Double> value,
+      List<java.lang.Double> defaultValue,
       java.lang.String comment,
-      Validator<java.util.List<java.lang.Double>> validator)
-      implements ConfigValue<java.util.List<java.lang.Double>> {
+      Validator<List<java.lang.Double>> validator)
+      implements ConfigValue<List<java.lang.Double>> {
 
-    public DoubleList(java.lang.String path, java.util.List<java.lang.Double> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public DoubleList {
+      validator = validator != null ? validator : Validator.none();
+    }
+
+    public DoubleList(java.lang.String path, List<java.lang.Double> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
+    }
+
+    public DoubleList(
+        java.lang.String path, List<java.lang.Double> defaultValue, java.lang.String comment) {
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public DoubleList(
         java.lang.String path,
-        java.util.List<java.lang.Double> defaultValue,
+        List<java.lang.Double> defaultValue,
+        Validator<List<java.lang.Double>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
-    }
-
-    public DoubleList(
-        java.lang.String path,
-        java.util.List<java.lang.Double> defaultValue,
-        Validator<java.util.List<java.lang.Double>> validator,
-        java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.List<java.lang.Double>> withValue(
-        java.util.List<java.lang.Double> newValue) {
+    public ConfigValue<List<java.lang.Double>> withValue(List<java.lang.Double> newValue) {
       return new DoubleList(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<List<java.lang.Double>> read(Object raw) {
+      return withValue(toList(raw, ConfigValue::toDouble));
     }
   }
 
@@ -322,42 +487,44 @@ public sealed interface ConfigValue<T> permits
    */
   record MapList(
       java.lang.String path,
-      java.util.List<java.util.Map<java.lang.String, Object>> value,
-      java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
+      List<Map<java.lang.String, Object>> value,
+      List<Map<java.lang.String, Object>> defaultValue,
       java.lang.String comment,
-      Validator<java.util.List<java.util.Map<java.lang.String, Object>>> validator)
-      implements ConfigValue<java.util.List<java.util.Map<java.lang.String, Object>>> {
+      Validator<List<Map<java.lang.String, Object>>> validator)
+      implements ConfigValue<List<Map<java.lang.String, Object>>> {
 
-    public MapList(
-        java.lang.String path,
-        java.util.List<java.util.Map<java.lang.String, Object>> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public MapList {
+      validator = validator != null ? validator : Validator.none();
+    }
+
+    public MapList(java.lang.String path, List<Map<java.lang.String, Object>> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public MapList(
         java.lang.String path,
-        java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
+        List<Map<java.lang.String, Object>> defaultValue,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public MapList(
         java.lang.String path,
-        java.util.List<java.util.Map<java.lang.String, Object>> defaultValue,
-        Validator<java.util.List<java.util.Map<java.lang.String, Object>>> validator,
+        List<Map<java.lang.String, Object>> defaultValue,
+        Validator<List<Map<java.lang.String, Object>>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.List<java.util.Map<java.lang.String, Object>>> withValue(
-        java.util.List<java.util.Map<java.lang.String, Object>> newValue) {
+    public ConfigValue<List<Map<java.lang.String, Object>>> withValue(
+        List<Map<java.lang.String, Object>> newValue) {
       return new MapList(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<List<Map<java.lang.String, Object>>> read(Object raw) {
+      return withValue(toList(raw, ConfigValue::toPlainMap));
     }
   }
 
@@ -373,42 +540,44 @@ public sealed interface ConfigValue<T> permits
    */
   record MapValue(
       java.lang.String path,
-      java.util.Map<java.lang.String, Object> value,
-      java.util.Map<java.lang.String, Object> defaultValue,
+      Map<java.lang.String, Object> value,
+      Map<java.lang.String, Object> defaultValue,
       java.lang.String comment,
-      Validator<java.util.Map<java.lang.String, Object>> validator)
-      implements ConfigValue<java.util.Map<java.lang.String, Object>> {
+      Validator<Map<java.lang.String, Object>> validator)
+      implements ConfigValue<Map<java.lang.String, Object>> {
 
-    public MapValue(
-        java.lang.String path,
-        java.util.Map<java.lang.String, Object> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public MapValue {
+      validator = validator != null ? validator : Validator.none();
+    }
+
+    public MapValue(java.lang.String path, Map<java.lang.String, Object> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public MapValue(
         java.lang.String path,
-        java.util.Map<java.lang.String, Object> defaultValue,
+        Map<java.lang.String, Object> defaultValue,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public MapValue(
         java.lang.String path,
-        java.util.Map<java.lang.String, Object> defaultValue,
-        Validator<java.util.Map<java.lang.String, Object>> validator,
+        Map<java.lang.String, Object> defaultValue,
+        Validator<Map<java.lang.String, Object>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.Map<java.lang.String, Object>> withValue(
-        java.util.Map<java.lang.String, Object> newValue) {
+    public ConfigValue<Map<java.lang.String, Object>> withValue(
+        Map<java.lang.String, Object> newValue) {
       return new MapValue(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<Map<java.lang.String, Object>> read(Object raw) {
+      return withValue(toPlainMap(raw));
     }
   }
 
@@ -424,42 +593,44 @@ public sealed interface ConfigValue<T> permits
    */
   record StringMap(
       java.lang.String path,
-      java.util.Map<java.lang.String, java.lang.String> value,
-      java.util.Map<java.lang.String, java.lang.String> defaultValue,
+      Map<java.lang.String, java.lang.String> value,
+      Map<java.lang.String, java.lang.String> defaultValue,
       java.lang.String comment,
-      Validator<java.util.Map<java.lang.String, java.lang.String>> validator)
-      implements ConfigValue<java.util.Map<java.lang.String, java.lang.String>> {
+      Validator<Map<java.lang.String, java.lang.String>> validator)
+      implements ConfigValue<Map<java.lang.String, java.lang.String>> {
 
-    public StringMap(
-        java.lang.String path,
-        java.util.Map<java.lang.String, java.lang.String> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public StringMap {
+      validator = validator != null ? validator : Validator.none();
+    }
+
+    public StringMap(java.lang.String path, Map<java.lang.String, java.lang.String> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public StringMap(
         java.lang.String path,
-        java.util.Map<java.lang.String, java.lang.String> defaultValue,
+        Map<java.lang.String, java.lang.String> defaultValue,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public StringMap(
         java.lang.String path,
-        java.util.Map<java.lang.String, java.lang.String> defaultValue,
-        Validator<java.util.Map<java.lang.String, java.lang.String>> validator,
+        Map<java.lang.String, java.lang.String> defaultValue,
+        Validator<Map<java.lang.String, java.lang.String>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.Map<java.lang.String, java.lang.String>> withValue(
-        java.util.Map<java.lang.String, java.lang.String> newValue) {
+    public ConfigValue<Map<java.lang.String, java.lang.String>> withValue(
+        Map<java.lang.String, java.lang.String> newValue) {
       return new StringMap(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<Map<java.lang.String, java.lang.String>> read(Object raw) {
+      return withValue(toMap(raw, ConfigValue::toStr));
     }
   }
 
@@ -475,42 +646,44 @@ public sealed interface ConfigValue<T> permits
    */
   record IntMap(
       java.lang.String path,
-      java.util.Map<java.lang.String, Integer> value,
-      java.util.Map<java.lang.String, Integer> defaultValue,
+      Map<java.lang.String, Integer> value,
+      Map<java.lang.String, Integer> defaultValue,
       java.lang.String comment,
-      Validator<java.util.Map<java.lang.String, Integer>> validator)
-      implements ConfigValue<java.util.Map<java.lang.String, Integer>> {
+      Validator<Map<java.lang.String, Integer>> validator)
+      implements ConfigValue<Map<java.lang.String, Integer>> {
 
-    public IntMap(
-        java.lang.String path,
-        java.util.Map<java.lang.String, Integer> defaultValue) {
-      this(path, defaultValue, defaultValue, null, Validator.none());
+    public IntMap {
+      validator = validator != null ? validator : Validator.none();
+    }
+
+    public IntMap(java.lang.String path, Map<java.lang.String, Integer> defaultValue) {
+      this(path, defaultValue, defaultValue, null, null);
     }
 
     public IntMap(
         java.lang.String path,
-        java.util.Map<java.lang.String, Integer> defaultValue,
+        Map<java.lang.String, Integer> defaultValue,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, Validator.none());
+      this(path, defaultValue, defaultValue, comment, null);
     }
 
     public IntMap(
         java.lang.String path,
-        java.util.Map<java.lang.String, Integer> defaultValue,
-        Validator<java.util.Map<java.lang.String, Integer>> validator,
+        Map<java.lang.String, Integer> defaultValue,
+        Validator<Map<java.lang.String, Integer>> validator,
         java.lang.String comment) {
-      this(path, defaultValue, defaultValue, comment, validator != null ? validator : Validator.none());
+      this(path, defaultValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ConfigValue<java.util.Map<java.lang.String, Integer>> withValue(
-        java.util.Map<java.lang.String, Integer> newValue) {
+    public ConfigValue<Map<java.lang.String, Integer>> withValue(
+        Map<java.lang.String, Integer> newValue) {
       return new IntMap(path, newValue, defaultValue, comment, validator);
     }
 
     @Override
-    public ValidationResult validate() {
-      return validator.validate(value);
+    public ConfigValue<Map<java.lang.String, Integer>> read(Object raw) {
+      return withValue(toMap(raw, ConfigValue::toInt));
     }
   }
 }
