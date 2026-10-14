@@ -119,6 +119,33 @@ public interface Config {
   java.util.List<Map<String, Object>> getMapList(String path);
 
   /**
+   * Gets a map with values of any YAML type.
+   *
+   * @param path the configuration path
+   * @return the map
+   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
+   */
+  Map<String, Object> getMap(String path);
+
+  /**
+   * Gets a string-to-string map.
+   *
+   * @param path the configuration path
+   * @return the map
+   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
+   */
+  Map<String, String> getStringMap(String path);
+
+  /**
+   * Gets a string-to-integer map.
+   *
+   * @param path the configuration path
+   * @return the map
+   * @throws IllegalArgumentException if the path doesn't exist or is wrong type
+   */
+  Map<String, Integer> getIntMap(String path);
+
+  /**
    * Returns all configuration values.
    */
   Map<String, ConfigValue<?>> allValues();

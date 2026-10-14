@@ -43,74 +43,65 @@ class SimpleConfig implements Config {
 
   @Override
   public int getInt(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.Int)) {
-      throw new IllegalArgumentException("Value at " + path + " is not an integer");
-    }
-    return ((ConfigValue.Int) value).value();
+    return typed(path, ConfigValue.Int.class, "an integer");
   }
 
   @Override
   public double getDouble(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.Double)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a double");
-    }
-    return ((ConfigValue.Double) value).value();
+    return typed(path, ConfigValue.Double.class, "a double");
   }
 
   @Override
   public String getString(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.String)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a string");
-    }
-    return ((ConfigValue.String) value).value();
+    return typed(path, ConfigValue.String.class, "a string");
   }
 
   @Override
   public boolean getBoolean(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.Boolean)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a boolean");
-    }
-    return ((ConfigValue.Boolean) value).value();
+    return typed(path, ConfigValue.Boolean.class, "a boolean");
   }
 
   @Override
   public List<String> getStringList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.StringList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a string list");
-    }
-    return ((ConfigValue.StringList) value).value();
+    return typed(path, ConfigValue.StringList.class, "a string list");
   }
 
   @Override
   public List<Integer> getIntList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.IntList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not an integer list");
-    }
-    return ((ConfigValue.IntList) value).value();
+    return typed(path, ConfigValue.IntList.class, "an integer list");
   }
 
   @Override
   public List<Double> getDoubleList(String path) {
-    ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.DoubleList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a double list");
-    }
-    return ((ConfigValue.DoubleList) value).value();
+    return typed(path, ConfigValue.DoubleList.class, "a double list");
   }
 
   @Override
   public List<Map<String, Object>> getMapList(String path) {
+    return typed(path, ConfigValue.MapList.class, "a map list");
+  }
+
+  @Override
+  public Map<String, Object> getMap(String path) {
+    return typed(path, ConfigValue.MapValue.class, "a map");
+  }
+
+  @Override
+  public Map<String, String> getStringMap(String path) {
+    return typed(path, ConfigValue.StringMap.class, "a string map");
+  }
+
+  @Override
+  public Map<String, Integer> getIntMap(String path) {
+    return typed(path, ConfigValue.IntMap.class, "an integer map");
+  }
+
+  private <R, V extends ConfigValue<R>> R typed(String path, Class<V> kind, String description) {
     ConfigValue<?> value = getOrThrow(path);
-    if (!(value instanceof ConfigValue.MapList)) {
-      throw new IllegalArgumentException("Value at " + path + " is not a map list");
+    if (!kind.isInstance(value)) {
+      throw new IllegalArgumentException("Value at " + path + " is not " + description);
     }
-    return ((ConfigValue.MapList) value).value();
+    return kind.cast(value).value();
   }
 
   @Override
@@ -119,11 +110,14 @@ class SimpleConfig implements Config {
   }
 
   @Override
-  @SuppressWarnings("unchecked")
   public <T> Config with(String path, T newValue) {
     ConfigValue<?> existing = getOrThrow(path);
-    ConfigValue<T> typedExisting = (ConfigValue<T>) existing;
-    ConfigValue<T> updated = typedExisting.withValue(newValue);
+    ConfigValue<?> updated;
+    try {
+      updated = existing.read(newValue);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("Invalid value for " + path + ": " + e.getMessage(), e);
+    }
 
     // Validate the new value
     ValidationResult validation = updated.validate();
@@ -235,6 +229,21 @@ class SimpleConfig implements Config {
     @Override
     public List<Map<String, Object>> getMapList(String relativePath) {
       return config.getMapList(fullPath(relativePath));
+    }
+
+    @Override
+    public Map<String, Object> getMap(String relativePath) {
+      return config.getMap(fullPath(relativePath));
+    }
+
+    @Override
+    public Map<String, String> getStringMap(String relativePath) {
+      return config.getStringMap(fullPath(relativePath));
+    }
+
+    @Override
+    public Map<String, Integer> getIntMap(String relativePath) {
+      return config.getIntMap(fullPath(relativePath));
     }
 
     @Override

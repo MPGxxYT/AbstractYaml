@@ -175,6 +175,15 @@ public abstract class ConfigSchema {
     }
 
     /**
+     * Adds a boolean value with validation to this section.
+     */
+    public SectionBuilder boolValue(
+        String key, boolean defaultValue, Validator<Boolean> validator, String comment) {
+      value(new ConfigValue.Boolean(prefix + "." + key, defaultValue, validator, comment));
+      return this;
+    }
+
+    /**
      * Adds a string list to this section.
      */
     public SectionBuilder stringList(

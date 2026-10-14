@@ -73,6 +73,21 @@ public interface ConfigSection {
   List<Map<String, Object>> getMapList(String relativePath);
 
   /**
+   * Gets a map with values of any YAML type.
+   */
+  Map<String, Object> getMap(String relativePath);
+
+  /**
+   * Gets a string-to-string map.
+   */
+  Map<String, String> getStringMap(String relativePath);
+
+  /**
+   * Gets a string-to-integer map.
+   */
+  Map<String, Integer> getIntMap(String relativePath);
+
+  /**
    * Updates a value in this section.
    * Returns a new config with the update applied.
    */

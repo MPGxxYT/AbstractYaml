@@ -1,13 +1,14 @@
 package me.mortaldev.config2;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -93,50 +94,35 @@ public class ConfigLoader {
   /**
    * Loads a specific value from the YAML configuration.
    */
-  @SuppressWarnings("unchecked")
   private ConfigValue<?> loadValue(FileConfiguration yaml, ConfigValue<?> schemaValue) {
     String path = schemaValue.path();
-
     try {
-      if (schemaValue instanceof ConfigValue.Int intValue) {
-        int value = yaml.getInt(path, intValue.defaultValue());
-        return intValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.Double doubleValue) {
-        double value = yaml.getDouble(path, doubleValue.defaultValue());
-        return doubleValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.String stringValue) {
-        String value = yaml.getString(path, stringValue.defaultValue());
-        return stringValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.Boolean boolValue) {
-        boolean value = yaml.getBoolean(path, boolValue.defaultValue());
-        return boolValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.StringList listValue) {
-        List<String> value = yaml.getStringList(path);
-        if (value.isEmpty() && !listValue.defaultValue().isEmpty()) {
-          value = listValue.defaultValue();
-        }
-        return listValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.IntList listValue) {
-        List<Integer> value = yaml.getIntegerList(path);
-        if (value.isEmpty() && !listValue.defaultValue().isEmpty()) {
-          value = listValue.defaultValue();
-        }
-        return listValue.withValue(value);
-      } else if (schemaValue instanceof ConfigValue.DoubleList listValue) {
-        List<Double> value = yaml.getDoubleList(path);
-        if (value.isEmpty() && !listValue.defaultValue().isEmpty()) {
-          value = listValue.defaultValue();
-        }
-        return listValue.withValue(value);
-      }
-    } catch (Exception e) {
+      return schemaValue.read(toPlain(yaml.get(path)));
+    } catch (IllegalArgumentException e) {
       logger.warning(
-          "Failed to load value '" + path + "' from " + file.getName() +
+          "Invalid value '" + path + "' in " + file.getName() +
           ": " + e.getMessage() + ". Using default.");
       return schemaValue;
     }
+  }
 
-    return schemaValue;
+  /** Converts Bukkit's ConfigurationSection nodes into plain maps. */
+  private static Object toPlain(Object raw) {
+    if (raw instanceof ConfigurationSection section) {
+      Map<String, Object> map = new LinkedHashMap<>();
+      for (String key : section.getKeys(false)) {
+        map.put(key, toPlain(section.get(key)));
+      }
+      return map;
+    }
+    if (raw instanceof List<?> list) {
+      List<Object> copy = new ArrayList<>(list.size());
+      for (Object item : list) {
+        copy.add(toPlain(item));
+      }
+      return copy;
+    }
+    return raw;
   }
 
   /**
