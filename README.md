@@ -85,7 +85,7 @@ AbstractYaml is published through [JitPack](https://jitpack.io/#MPGxxYT/Abstract
   <dependency>
     <groupId>com.github.MPGxxYT</groupId>
     <artifactId>AbstractYaml</artifactId>
-    <version>v2.0.0</version>
+    <version>v2.0.1</version>
   </dependency>
 </dependencies>
 ```
@@ -98,7 +98,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.MPGxxYT:AbstractYaml:v2.0.0'
+  implementation 'com.github.MPGxxYT:AbstractYaml:v2.0.1'
 }
 ```
 
@@ -108,7 +108,7 @@ Other [releases](https://github.com/MPGxxYT/AbstractYaml/releases) are listed on
 > The library is not a plugin: it has no `plugin.yml`. Shade it into your plugin jar (for example with `maven-shade-plugin`) and relocate `me.mortaldev` if several plugins on the same server bundle different versions.
 
 > [!IMPORTANT]
-> These docs describe v2.0.0. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> These docs describe v2.0.1. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## Quick start
 

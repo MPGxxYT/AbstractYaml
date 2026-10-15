@@ -1,5 +1,9 @@
 # AbstractYaml Library - Changelog
 
+## v2.0.1
+
+Same code as v2.0.0. The v2.0.0 build on JitPack failed because Maven Central rate-limited the build server, and JitPack does not rebuild a failed tag, so this release gives the code a version that downloads. Use `v2.0.1` in place of `v2.0.0`.
+
 ## v2.0.0
 
 The schema API (`me.mortaldev.config2`) is now the recommended API. Plugins built on v1.0.0 compile unchanged; see the behaviour changes below.
