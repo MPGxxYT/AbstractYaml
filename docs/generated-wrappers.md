@@ -89,6 +89,67 @@ Map<String, Integer> damage = AbilitiesWrapper.Fireball.Damage.byMob();
 
 Wrappers are regenerated on every build, so they always match the schema. Don't commit them and don't edit them.
 
+Use the wrapper from where the build writes it; don't copy it into `src/main/java`. The processor skips classes that already exist in your sources, so a copy stops updating when the schema changes. If IntelliJ marks the wrapper's import red, reload the Maven or Gradle project so it picks up the generated sources folder.
+
+## Generating wrappers while other code doesn't compile
+
+The processor runs before javac checks types, so the wrapper is written even when other files have type errors (missing classes, wrong types, calls to a wrapper that doesn't exist yet). The build still reports failure. Code that only failed because the wrapper was missing compiles on the next build.
+
+A syntax error (a missing brace, an unclosed method) stops javac while it parses, before the processor runs, so no wrapper is generated. Fix it first, or run the processor on the schema file alone (below).
+
+### Maven
+
+Tell the compiler plugin not to fail the build on compile errors:
+
+```bash
+mvn compile -Dmaven.compiler.failOnError=false
+```
+
+The errors are still printed, but the build ends with `BUILD SUCCESS`. With a syntax error it also reports `BUILD SUCCESS` without generating anything, so check that the wrapper exists in `target/generated-sources/annotations`.
+
+In IntelliJ, open the Maven tool window, right-click **Lifecycle > compile**, choose **Modify Run Configuration...** and set the command line to `compile -Dmaven.compiler.failOnError=false`. The saved configuration appears under **Run Configurations** in the same window.
+
+Avoid setting `maven.compiler.failOnError` in the pom or in IntelliJ's Maven runner properties: every build, including `package` and `install`, would then pass with broken code.
+
+The flag only covers errors in your code. A JDK error such as `invalid target release: 21` means Maven runs on an older JDK than the pom targets; in IntelliJ, set **File > Project Structure > Project > SDK** to a matching JDK.
+
+### Gradle
+
+Gradle has no command-line switch for this. Add a property check to the build script:
+
+```groovy
+tasks.withType(JavaCompile).configureEach {
+  options.failOnError = !project.hasProperty('ignoreCompileErrors')
+}
+```
+
+Kotlin DSL:
+
+```kotlin
+tasks.withType<JavaCompile>().configureEach {
+  options.isFailOnError = !project.hasProperty("ignoreCompileErrors")
+}
+```
+
+Normal builds still fail on errors. To generate wrappers anyway:
+
+```bash
+gradle compileJava -PignoreCompileErrors
+```
+
+As with Maven, the build reports success even after a syntax error, so check that the wrapper exists in `build/generated/sources/annotationProcessor/java/main`.
+
+### Processing the schema file alone
+
+`javac -proc:only` runs annotation processors without compiling anything. Pass it only the schema files and the rest of the project is never read, so this also works when other files have syntax errors. With Maven, write the classpath to a file first:
+
+```bash
+mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt
+javac -proc:only -cp "$(cat cp.txt)" -s target/generated-sources/annotations src/main/java/com/example/config/AbilitiesConfigSchema.java
+```
+
+On JDK 23 and newer, also pass `-processorpath` with the path to the AbstractYaml jar. The schema's own imports must still resolve.
+
 ## How schemas are read
 
 The processor reads the schema's constructor from the source code instead of running it. It understands:
