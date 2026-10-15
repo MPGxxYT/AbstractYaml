@@ -25,7 +25,7 @@ The processor ships in the AbstractYaml jar. Add the library to the compiler's a
           <path>
             <groupId>com.github.MPGxxYT</groupId>
             <artifactId>AbstractYaml</artifactId>
-            <version>v2.0.0</version>
+            <version>v2.0.1</version>
           </path>
         </annotationProcessorPaths>
       </configuration>
@@ -43,8 +43,8 @@ Wrappers are written to `target/generated-sources/annotations`, which Maven and 
 
 ```groovy
 dependencies {
-  implementation 'com.github.MPGxxYT:AbstractYaml:v2.0.0'
-  annotationProcessor 'com.github.MPGxxYT:AbstractYaml:v2.0.0'
+  implementation 'com.github.MPGxxYT:AbstractYaml:v2.0.1'
+  annotationProcessor 'com.github.MPGxxYT:AbstractYaml:v2.0.1'
 }
 ```
 
@@ -52,8 +52,8 @@ Kotlin DSL:
 
 ```kotlin
 dependencies {
-  implementation("com.github.MPGxxYT:AbstractYaml:v2.0.0")
-  annotationProcessor("com.github.MPGxxYT:AbstractYaml:v2.0.0")
+  implementation("com.github.MPGxxYT:AbstractYaml:v2.0.1")
+  annotationProcessor("com.github.MPGxxYT:AbstractYaml:v2.0.1")
 }
 ```
 
