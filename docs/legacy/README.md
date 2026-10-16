@@ -1,7 +1,7 @@
 # Legacy API
 
 > [!WARNING]
-> These guides describe the original `AbstractConfig` API in the `me.mortaldev` package. It is deprecated and kept so that existing plugins keep working. New plugins should use the schema API; see the [main README](../../README.md) and [Migrating from the legacy API](../migrating-from-legacy.md).
+> These guides describe the original `AbstractConfig` API in the `me.mortaldev.abstractyaml` package. It is deprecated and kept so that existing plugins keep working. New plugins should use the schema API; see the [main README](../../README.md) and [Migrating from the legacy API](../migrating-from-legacy.md).
 
 | Guide | Covers |
 | --- | --- |

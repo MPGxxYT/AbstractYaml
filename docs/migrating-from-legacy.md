@@ -1,6 +1,6 @@
 # Migrating from the legacy API
 
-The legacy API (`AbstractConfig`, `ConfigValue`, `ConfigValueContainer` in the `me.mortaldev` package) is deprecated but still works. You can migrate one config at a time: both APIs can be used in the same plugin, as long as each file is managed by only one of them.
+The legacy API (`AbstractConfig`, `ConfigValue`, `ConfigValueContainer` in the `me.mortaldev.abstractyaml` package) is deprecated but still works. You can migrate one config at a time: both APIs can be used in the same plugin, as long as each file is managed by only one of them.
 
 ## Side by side
 

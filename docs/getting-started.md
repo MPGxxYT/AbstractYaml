@@ -10,9 +10,9 @@ A schema is a class that extends `ConfigSchema` and declares its values in the c
 package com.example.myplugin.config;
 
 import java.util.List;
-import me.mortaldev.config2.ConfigSchema;
-import me.mortaldev.config2.RegisterConfig;
-import me.mortaldev.config2.Validator;
+import me.mortaldev.abstractyaml.config2.ConfigSchema;
+import me.mortaldev.abstractyaml.config2.RegisterConfig;
+import me.mortaldev.abstractyaml.config2.Validator;
 
 @RegisterConfig
 public class MainSchema extends ConfigSchema {

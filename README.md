@@ -85,7 +85,7 @@ AbstractYaml is published through [JitPack](https://jitpack.io/#MPGxxYT/Abstract
   <dependency>
     <groupId>com.github.MPGxxYT</groupId>
     <artifactId>AbstractYaml</artifactId>
-    <version>v2.0.1</version>
+    <version>v3.0.0</version>
   </dependency>
 </dependencies>
 ```
@@ -98,17 +98,24 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.MPGxxYT:AbstractYaml:v2.0.1'
+  implementation 'com.github.MPGxxYT:AbstractYaml:v3.0.0'
 }
 ```
 
 Other [releases](https://github.com/MPGxxYT/AbstractYaml/releases) are listed on GitHub; `master-SNAPSHOT` builds the latest commit. To generate [wrapper classes](docs/generated-wrappers.md), also add the library to the annotation processor path.
 
 > [!NOTE]
-> The library is not a plugin: it has no `plugin.yml`. Shade it into your plugin jar (for example with `maven-shade-plugin`) and relocate `me.mortaldev` if several plugins on the same server bundle different versions.
+> The library is not a plugin: it has no `plugin.yml`. Shade it into your plugin jar (for example with `maven-shade-plugin`) and relocate `me.mortaldev.abstractyaml` if several plugins on the same server bundle different versions:
+>
+> ```xml
+> <relocation>
+>   <pattern>me.mortaldev.abstractyaml</pattern>
+>   <shadedPattern>com.example.myplugin.libs.abstractyaml</shadedPattern>
+> </relocation>
+> ```
 
 > [!IMPORTANT]
-> These docs describe v2.0.1. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> These docs describe v3.0.0. v2.x has the same API in the `me.mortaldev` and `me.mortaldev.config2` packages. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## Quick start
 
@@ -173,7 +180,7 @@ Map<String, Exception> failures = ConfigManager.getInstance().reloadAll();
 
 ### Legacy API
 
-The original `AbstractConfig` API in the `me.mortaldev` package is still shipped so existing plugins keep working, but it is deprecated. New plugins should use the schema API in `me.mortaldev.config2`. Its guides are in [docs/legacy](docs/legacy/README.md).
+The original `AbstractConfig` API in the `me.mortaldev.abstractyaml` package is still shipped so existing plugins keep working, but it is deprecated. New plugins should use the schema API in `me.mortaldev.abstractyaml.config2`. Its guides are in [docs/legacy](docs/legacy/README.md).
 
 ## Building from source
 

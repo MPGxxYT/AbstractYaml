@@ -13,9 +13,9 @@ Add the AbstractYaml library to your project's dependencies (already included in
 ```java
 package com.yourplugin.config;
 
-import me.mortaldev.AbstractConfig;
-import me.mortaldev.ConfigValue;
-import me.mortaldev.ConfigValidator;
+import me.mortaldev.abstractyaml.AbstractConfig;
+import me.mortaldev.abstractyaml.ConfigValue;
+import me.mortaldev.abstractyaml.ConfigValidator;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MyConfig extends AbstractConfig {
