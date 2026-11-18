@@ -85,7 +85,7 @@ AbstractYaml is published through [JitPack](https://jitpack.io/#MPGxxYT/Abstract
   <dependency>
     <groupId>com.github.MPGxxYT</groupId>
     <artifactId>AbstractYaml</artifactId>
-    <version>v3.0.0</version>
+    <version>v3.0.1</version>
   </dependency>
 </dependencies>
 ```
@@ -98,7 +98,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.github.MPGxxYT:AbstractYaml:v3.0.0'
+  implementation 'com.github.MPGxxYT:AbstractYaml:v3.0.1'
 }
 ```
 
@@ -115,7 +115,7 @@ Other [releases](https://github.com/MPGxxYT/AbstractYaml/releases) are listed on
 > ```
 
 > [!IMPORTANT]
-> These docs describe v3.0.0. v2.x has the same API in the `me.mortaldev` and `me.mortaldev.config2` packages. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> These docs describe v3.0.1; v3.0.0 has the same API without the Javadoc. v2.x has the same API in the `me.mortaldev` and `me.mortaldev.config2` packages. `v1.0.0` predates `ConfigSource`, `ConfigView`, the map getters, the instance-based `ConfigManager` and the wrapper processor. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## Quick start
 

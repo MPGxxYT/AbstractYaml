@@ -49,25 +49,36 @@ public @interface GenerateWrapper {
    * <ul>
    *   <li>AbilitiesConfigSchema → AbilitiesWrapper</li>
    *   <li>CTFSchema → CTFWrapper</li>
+   *   <li>Arena → ArenaWrapper (no suffix to replace, so {@code Wrapper} is appended)</li>
    * </ul>
+   *
+   * @return the class name; empty (the default) to derive it from the schema class
    */
   String value() default "";
 
   /**
    * The package of the generated class.
    *
-   * <p>If empty, a {@code wrappers} package inside the schema's package.
+   * <p>If empty, a {@code wrappers} package inside the schema's package: a schema in
+   * {@code com.example.config} gets {@code com.example.config.wrappers}.
+   *
+   * @return the package name; empty (the default) for {@code <schema package>.wrappers}
    */
   String packageName() default "";
 
   /**
    * Whether to generate a {@code reload()} method. Accessors never cache, so the method does
    * nothing; it exists so code written for earlier wrappers still compiles.
+   *
+   * @return {@code true} (the default) to generate {@code reload()}
    */
   boolean generateReload() default true;
 
   /**
-   * Whether the generated class is {@code final}.
+   * Whether the generated class is {@code final}. Its nested section classes are always
+   * {@code static final}.
+   *
+   * @return {@code true} (the default) for a {@code final} class
    */
   boolean makeFinal() default true;
 }

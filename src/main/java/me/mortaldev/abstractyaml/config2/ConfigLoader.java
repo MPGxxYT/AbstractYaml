@@ -13,8 +13,42 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Loads configurations from a {@link ConfigSource}.
- * Supports auto-generation of missing files and validation.
+ * Loads one config file for a {@link ConfigSchema} and returns it as a {@link Config}.
+ *
+ * <p>Most plugins don't use this class directly: {@link ConfigManager} creates a loader for every
+ * registered schema. Use it to load a single file yourself, or in tests:
+ *
+ * <pre>{@code
+ * Config config = ConfigLoader.builder(plugin)
+ *     .schema(new AbilitiesConfigSchema())
+ *     .load();                                   // plugins/YourPlugin/abilities.yml
+ *
+ * Config inTest = ConfigLoader.builder()
+ *     .schema(new AbilitiesConfigSchema())
+ *     .source(ConfigSource.inMemory("fireball:\n  cooldown: 20\n"))
+ *     .load();
+ * }</pre>
+ *
+ * <h2>What {@link #load()} does</h2>
+ *
+ * <ul>
+ *   <li><b>No file yet:</b> every value gets its default and the defaults are written to the file
+ *       (unless {@link Builder#autoGenerate(boolean) autoGenerate} is off).
+ *   <li><b>YAML syntax error:</b> logged as an error; every value gets its default. The file is
+ *       not changed, so the admin can fix it.
+ *   <li><b>Path missing from the file:</b> logged as a warning; that value gets its default.
+ *   <li><b>Data of the wrong type</b> ({@code cooldown: abc} for an int): logged as a warning;
+ *       that value gets its default. See {@link ConfigValue} for what each type accepts.
+ *   <li><b>Value fails its validator:</b> {@link ConfigLoadException}, unless
+ *       {@link Builder#validateOnLoad(boolean) validateOnLoad} is off. No config is returned.
+ *   <li><b>Keys the schema does not declare:</b> ignored and left in the file.
+ * </ul>
+ *
+ * <p>Apart from creating a missing file, loading never writes to the file: missing or invalid
+ * values are replaced in memory only.
+ *
+ * <p>A loader keeps no loaded values; each {@link #load()} reads the source again. It is not
+ * synchronized, so don't load the same loader from several threads at once.
  */
 public class ConfigLoader {
   private final ConfigSchema schema;
@@ -32,11 +66,19 @@ public class ConfigLoader {
   }
 
   /**
-   * Loads the configuration.
-   * If nothing is stored yet and autoGenerate is true, the defaults are written.
+   * Reads the source and returns the config. See the class description for how missing,
+   * mistyped and invalid values are handled.
    *
    * @return the loaded configuration
-   * @throws ConfigLoadException if validation fails
+   * @throws ConfigLoadException if validation is on and a value fails its validator. When the
+   *     file does not exist yet, this means a default fails its own validator, and the file is
+   *     not created.
+   * @throws java.io.UncheckedIOException if the file exists but cannot be read, or cannot be
+   *     created
+   * @throws IllegalArgumentException if the file must be created and a default list or map
+   *     contains something other than String, Number, Boolean, List or Map
+   * @throws IllegalStateException if the file must be created and one path is declared both as
+   *     a value and as a section
    */
   public Config load() {
     String text = source.read();
@@ -135,15 +177,21 @@ public class ConfigLoader {
   }
 
   /**
-   * Reloads the configuration.
-   * Returns a fresh config instance.
+   * Loads the file again. Same as {@link #load()}: the source is read fresh and a new config is
+   * returned. Configs returned earlier are not changed.
+   *
+   * @return the newly loaded configuration
+   * @throws ConfigLoadException if validation is on and a value fails its validator
+   * @throws java.io.UncheckedIOException if the file cannot be read or created
    */
   public Config reload() {
     return load();
   }
 
   /**
-   * The source this loader reads from.
+   * Returns where this loader reads and writes the YAML text.
+   *
+   * @return the source
    */
   public ConfigSource source() {
     return source;
@@ -152,20 +200,35 @@ public class ConfigLoader {
   // ===== Builder =====
 
   /**
-   * Creates a builder that resolves files and logging from a plugin.
+   * Starts a loader for a plugin. Unless you set a {@link Builder#source(ConfigSource) source}
+   * or {@link Builder#file(File) file}, the file is {@code <schema name>.yml} in the plugin's
+   * data folder, and messages go to the plugin's logger.
+   *
+   * @param plugin the plugin that owns the file
+   * @return a new builder
    */
   public static Builder builder(JavaPlugin plugin) {
     return new Builder(plugin);
   }
 
   /**
-   * Creates a builder without a plugin. Set a {@link Builder#source(ConfigSource) source} or an
-   * absolute {@link Builder#file(File) file}.
+   * Starts a loader without a plugin, for tests or tools that run outside a server. Set a
+   * {@link Builder#source(ConfigSource) source} or an absolute {@link Builder#file(File) file};
+   * {@link Builder#file(String)} needs a plugin and throws here. Messages go to
+   * {@code Logger.getLogger(<schema name>)} unless you set a {@link Builder#logger(Logger)
+   * logger}.
+   *
+   * @return a new builder
    */
   public static Builder builder() {
     return new Builder(null);
   }
 
+  /**
+   * Configures a {@link ConfigLoader}. Get one from {@link ConfigLoader#builder(JavaPlugin)} or
+   * {@link ConfigLoader#builder()}. Only {@link #schema(ConfigSchema)} is required. Each setter
+   * returns this builder; setting the same option twice keeps the last value.
+   */
   public static class Builder {
     private final JavaPlugin plugin;
     private ConfigSchema schema;
@@ -179,7 +242,10 @@ public class ConfigLoader {
     }
 
     /**
-     * Sets the schema for this configuration.
+     * Sets the schema that declares the file's values. Required.
+     *
+     * @param schema the schema
+     * @return this builder
      */
     public Builder schema(ConfigSchema schema) {
       this.schema = schema;
@@ -187,7 +253,12 @@ public class ConfigLoader {
     }
 
     /**
-     * Sets where the YAML text is read from and written to.
+     * Sets where the YAML text is read from and written to, such as
+     * {@link ConfigSource#inMemory(String)} in a test. Replaces any earlier
+     * {@link #file(File) file}.
+     *
+     * @param source the source
+     * @return this builder
      */
     public Builder source(ConfigSource source) {
       this.source = source;
@@ -195,15 +266,26 @@ public class ConfigLoader {
     }
 
     /**
-     * Sets the file to load from.
-     * If not specified, uses plugin.getDataFolder() / schema.name() + ".yml"
+     * Sets the file to read and write. If neither this nor {@link #source(ConfigSource)} is
+     * set, the file is {@code <plugin data folder>/<schema name>.yml}.
+     *
+     * @param file the file; a relative path is resolved against the server's working
+     *     directory, not the plugin's data folder
+     * @return this builder
      */
     public Builder file(File file) {
       return source(ConfigSource.file(file));
     }
 
     /**
-     * Sets the file by name (relative to plugin data folder).
+     * Sets the file by name, inside the plugin's data folder. {@code ".yml"} is added if the
+     * name does not end with it, and the name may include folders:
+     * {@code file("arenas/castle")} uses {@code plugins/YourPlugin/arenas/castle.yml}.
+     *
+     * @param name the file name, relative to the plugin's data folder
+     * @return this builder
+     * @throws IllegalStateException if the builder came from {@link ConfigLoader#builder()},
+     *     which has no plugin
      */
     public Builder file(String name) {
       if (!name.endsWith(".yml")) {
@@ -213,8 +295,11 @@ public class ConfigLoader {
     }
 
     /**
-     * Whether to auto-generate the file if it doesn't exist.
-     * Default: true
+     * Sets whether a missing file is created with the defaults. When off, a missing file still
+     * loads with the defaults, but nothing is written.
+     *
+     * @param autoGenerate {@code true} to create missing files (the default)
+     * @return this builder
      */
     public Builder autoGenerate(boolean autoGenerate) {
       this.autoGenerate = autoGenerate;
@@ -222,9 +307,12 @@ public class ConfigLoader {
     }
 
     /**
-     * Whether to validate the config after loading.
-     * If validation fails, throws ConfigLoadException.
-     * Default: true
+     * Sets whether values are checked with their validators when loading. When on, a failing
+     * value makes {@link ConfigLoader#load()} throw {@link ConfigLoadException}. When off,
+     * failing values are loaded as they are; {@link Config#validate()} still reports them.
+     *
+     * @param validateOnLoad {@code true} to validate (the default)
+     * @return this builder
      */
     public Builder validateOnLoad(boolean validateOnLoad) {
       this.validateOnLoad = validateOnLoad;
@@ -232,8 +320,11 @@ public class ConfigLoader {
     }
 
     /**
-     * Sets a custom logger.
-     * If not specified, uses the plugin's logger.
+     * Sets where load messages (file created, missing and invalid values) are logged.
+     *
+     * @param logger the logger; if not set, the plugin's logger, or
+     *     {@code Logger.getLogger(<schema name>)} without a plugin
+     * @return this builder
      */
     public Builder logger(Logger logger) {
       this.logger = logger;
@@ -241,7 +332,12 @@ public class ConfigLoader {
     }
 
     /**
-     * Builds and returns the loader (does not load the config yet).
+     * Creates the loader without loading anything. Call {@link ConfigLoader#load()} on it, as
+     * often as needed.
+     *
+     * @return the loader
+     * @throws IllegalStateException if no schema is set, or no source or file is set and the
+     *     builder has no plugin to find the default file
      */
     public ConfigLoader build() {
       if (schema == null) {
@@ -257,7 +353,12 @@ public class ConfigLoader {
     }
 
     /**
-     * Builds the loader and immediately loads the config.
+     * Creates the loader and loads the config once. Same as {@code build().load()}; use
+     * {@link #build()} instead if you will reload later.
+     *
+     * @return the loaded configuration
+     * @throws IllegalStateException if the builder is incomplete; see {@link #build()}
+     * @throws ConfigLoadException if a value fails validation; see {@link ConfigLoader#load()}
      */
     public Config load() {
       return build().load();
@@ -273,13 +374,28 @@ public class ConfigLoader {
   }
 
   /**
-   * Exception thrown when config loading fails.
+   * Thrown when a config cannot be loaded because values fail their validators. The message
+   * names the file and lists every failing value on its own line, as {@code "path: message"}.
+   *
+   * <p>{@link ConfigManager#loadAll()} catches it and returns it in its failure map.
    */
   public static class ConfigLoadException extends RuntimeException {
+
+    /**
+     * Creates the exception with a message.
+     *
+     * @param message what failed
+     */
     public ConfigLoadException(String message) {
       super(message);
     }
 
+    /**
+     * Creates the exception with a message and the exception that caused it.
+     *
+     * @param message what failed
+     * @param cause the underlying exception
+     */
     public ConfigLoadException(String message, Throwable cause) {
       super(message, cause);
     }

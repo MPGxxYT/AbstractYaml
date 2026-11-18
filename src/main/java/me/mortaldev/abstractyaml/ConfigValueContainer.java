@@ -3,12 +3,14 @@ package me.mortaldev.abstractyaml;
 /**
  * Base class for organizing configuration values into logical sections.
  *
- * <p>ValueContainers allow you to group related config values together, reducing boilerplate
- * and improving organization in large configuration files.
+ * <p>A container groups the values under one path prefix: a container with prefix
+ * {@code "debug"} reads {@code "log-events"} from {@code "debug.log-events"}. Subclasses need a
+ * public constructor taking {@code (AbstractConfig, String)} to be created by
+ * {@link AbstractConfig#loadAllContainers()}.
  *
  * <p>Example usage:
  * <pre>{@code
- * public class DebugContainer extends ValueContainer {
+ * public class DebugContainer extends ConfigValueContainer {
  *     private ConfigValue<Boolean> logEvents;
  *     private ConfigValue<Boolean> verboseMode;
  *
@@ -48,7 +50,10 @@ package me.mortaldev.abstractyaml;
  */
 @Deprecated
 public abstract class ConfigValueContainer {
+    /** The config file this container reads from and saves to. */
     protected final AbstractConfig config;
+
+    /** The prefix put in front of every path in this container, without a trailing dot. */
     protected final String pathPrefix;
     private String headerComment;
 
@@ -56,7 +61,8 @@ public abstract class ConfigValueContainer {
      * Creates a new ValueContainer.
      *
      * @param config the parent configuration
-     * @param pathPrefix the path prefix for all values in this container (e.g., "debug", "messages")
+     * @param pathPrefix the path prefix for all values in this container (e.g., "debug",
+     *     "messages"); empty for no prefix
      */
     protected ConfigValueContainer(AbstractConfig config, String pathPrefix) {
         this.config = config;
@@ -64,8 +70,9 @@ public abstract class ConfigValueContainer {
     }
 
     /**
-     * Loads all ConfigValues in this container.
-     * Called automatically by the parent config during initialization.
+     * Loads all ConfigValues in this container. Called by
+     * {@link AbstractConfig#loadAllContainers()} or {@link AbstractConfig#loadContainer}, on
+     * every load and reload. Assign each field from a {@code loadValue} call here.
      *
      * <p>Implementations should use the {@link #loadValue} helper methods to load their values.
      */
@@ -138,11 +145,16 @@ public abstract class ConfigValueContainer {
     }
 
     /**
-     * Gets a config value with the path prefix automatically applied.
+     * Reads a value with this container's prefix put in front of its path. A new
+     * {@link ConfigValue} with the full path is created and read; {@code configValue} itself is
+     * not changed. Handling of invalid values is described in
+     * {@link AbstractConfig#getConfigValue(ConfigValue)}.
      *
      * @param configValue the ConfigValue to load
      * @param <T> the type of the value
      * @return the loaded ConfigValue with the full path
+     * @throws IllegalArgumentException if the value is invalid and its default also fails the
+     *     validator
      */
     protected <T> ConfigValue<T> getConfigValue(ConfigValue<T> configValue) {
         // Prepend the pathPrefix to the configValue's ID
@@ -168,10 +180,13 @@ public abstract class ConfigValueContainer {
     }
 
     /**
-     * Saves a config value to the configuration file.
+     * Validates a config value and writes it to the file at its path, as
+     * {@link AbstractConfig#saveValue(ConfigValue)} does. Pass a value returned by
+     * {@code loadValue}, which already has the full path.
      *
      * @param configValue the ConfigValue to save
      * @param <T> the type of the value
+     * @throws IllegalArgumentException if the value fails its validator
      */
     protected <T> void saveValue(ConfigValue<T> configValue) {
         config.saveValue(configValue);
@@ -187,8 +202,9 @@ public abstract class ConfigValueContainer {
     }
 
     /**
-     * Sets a header comment for this container section.
-     * The header will appear above the container's section in the YAML file.
+     * Sets a header comment for this container section. Call it in the constructor or in
+     * {@link #load()}. The header appears above the container's section when the file is
+     * generated, only for containers loaded by {@link AbstractConfig#loadAllContainers()}.
      *
      * @param headerComment the header comment
      */

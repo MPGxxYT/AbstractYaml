@@ -17,10 +17,65 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
- * Abstract base class for configuration management with caching support.
+ * Base class for one legacy config file. Subclass it once per file, keep each value in a
+ * {@link ConfigValue} field, and read the values in {@link #loadData()}:
  *
- * <p>This class provides a framework for loading, saving, and accessing configuration values
- * with built-in caching to reduce disk I/O operations.
+ * <pre>{@code
+ * public class MainConfig extends AbstractConfig {
+ *     private final JavaPlugin plugin;
+ *     private ConfigValue<Integer> cooldown;
+ *
+ *     public MainConfig(JavaPlugin plugin) {
+ *         this.plugin = plugin;
+ *     }
+ *
+ *     @Override public String getName() { return "config"; }      // config.yml
+ *     @Override public JavaPlugin getMain() { return plugin; }
+ *     @Override public void log(String message) { plugin.getLogger().info(message); }
+ *
+ *     @Override
+ *     public void loadData() {
+ *         cooldown = getConfigValue(new ConfigValue<>("cooldown", Integer.class, 10)
+ *             .setValidator(ConfigValidator.range(1, 300))
+ *             .setComment("Seconds between uses"));
+ *     }
+ *
+ *     public int getCooldown() { return cooldown.getValue(); }
+ * }
+ *
+ * // In onEnable():
+ * mainConfig = new MainConfig(this);
+ * mainConfig.load();
+ * }</pre>
+ *
+ * <h2>Loading</h2>
+ *
+ * <p>{@link #load()} reads {@code <getName()>.yml} from the plugin's data folder and calls
+ * {@link #loadData()}. For each value, {@link #getConfigValue(ConfigValue)}:
+ * <ul>
+ *   <li>uses the file's value when it has the expected type and passes the validator;
+ *   <li>uses the default, <b>and writes the default to the file at once</b>, when the file's
+ *       value has the wrong type or fails the validator (a warning is logged);
+ *   <li>uses the default without writing anything when the path is missing from the file.
+ * </ul>
+ *
+ * <p>Numbers convert between {@code Integer}, {@code Long}, {@code Float} and {@code Double}
+ * when nothing is lost: {@code 5} works for a {@code Double} value and {@code 5.0} for an
+ * {@code Integer} value, but {@code 5.5} for an {@code Integer} value is invalid. Nothing else
+ * is converted: {@code name: 5} for a {@code String} value is invalid.
+ *
+ * <p>If the file did not exist, or has no keys, it is created after {@link #loadData()} from
+ * every value that was read, with their comments. When the plugin jar contains a file of the
+ * same name, it is copied first, so its values are kept. When it does not, the plugin's logger
+ * shows {@code "Failed to load resource: <name>.yml"}; that warning is harmless here.
+ *
+ * <h2>Caching</h2>
+ *
+ * <p>Values are cached by path. A second {@link #getConfigValue(ConfigValue)} for the same path
+ * returns the cached value without reading the file. {@link #load()} and {@link #reload()}
+ * clear the cache.
+ *
+ * <p>This class is not thread-safe: load and save on the main server thread.
  *
  * @deprecated Part of the legacy config system, kept for existing plugins. New code should use
  *     {@code me.mortaldev.abstractyaml.config2}: a {@code ConfigSchema} subclass registered with
@@ -41,38 +96,49 @@ public abstract class AbstractConfig {
   private String fileHeader;
 
   /**
-   * Logs a message to the console.
+   * Logs a message. The library does not call this; it is for your own code. Library warnings
+   * go to {@code getMain().getLogger()}.
    *
    * @param message the message to log
    */
   public abstract void log(String message);
 
   /**
-   * Returns the name of this configuration file, without the extension.
+   * Returns the name of this configuration file, without the extension. {@code "config"}
+   * means {@code config.yml} in the plugin's data folder; {@code "arenas/castle"} means
+   * {@code arenas/castle.yml}.
    *
    * @return the name of this configuration file
    */
   public abstract String getName();
 
   /**
-   * Returns the main plugin for this configuration.
+   * Returns the plugin that owns this file. Its data folder contains the file, its jar may
+   * contain a default copy, and its logger receives warnings.
    *
-   * @return the main plugin
+   * @return the main plugin; must not be {@code null} when loading or saving
    */
   public abstract JavaPlugin getMain();
 
   /**
-   * Called after the configuration is loaded to initialize config values.
-   * Implementations should load their ConfigValue fields here.
+   * Reads every value of this file. Called by {@link #load()} and {@link #reload()} after the
+   * file is read. Assign each {@link ConfigValue} field from
+   * {@link #getConfigValue(ConfigValue)}, or call {@link #loadAllContainers()}.
+   *
+   * <p>Only values requested here are written when the file is generated, so request every
+   * value on each load, even ones you read rarely.
    */
   public abstract void loadData();
 
+  /** Creates the config. Nothing is read until {@link #load()}. */
   public AbstractConfig() {}
 
   /**
-   * Enables or disables caching for this configuration.
+   * Enables or disables caching for this configuration. With caching off, every
+   * {@link #getConfigValue(ConfigValue)} reads the value from the file contents loaded in
+   * memory (not from disk). Turning it off also clears the cache.
    *
-   * @param enabled true to enable caching, false to disable
+   * @param enabled true to enable caching (the default), false to disable
    */
   public void setCacheEnabled(boolean enabled) {
     this.cacheEnabled = enabled;
@@ -91,7 +157,9 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Clears the value cache, forcing the next access to read from disk.
+   * Clears the value cache, so the next {@link #getConfigValue(ConfigValue)} reads from the
+   * file contents loaded in memory. To pick up changes made to the file on disk, call
+   * {@link #reload()} instead.
    */
   public void clearCache() {
     valueCache.clear();
@@ -107,11 +175,23 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Retrieves and populates a ConfigValue from the configuration.
+   * Reads a value from the file into {@code configValue} and returns it. Call this from
+   * {@link #loadData()}. See the class description for how wrong-typed, invalid and missing
+   * values are handled; an invalid value is replaced by the default <b>in the file</b> too.
    *
-   * @param configValue the ConfigValue to populate
-   * @return the populated ConfigValue
+   * <p>The given object is changed and returned, so
+   * {@code cooldown = getConfigValue(new ConfigValue<>("cooldown", Integer.class, 10))} is the
+   * usual form. The value is also remembered for generating the file.
+   *
+   * @param configValue the value to read, with its path, type, default and optional validator
+   *     and comment
+   * @return {@code configValue}, now containing the value from the file or the default
    * @param <T> the type of the value
+   * @throws IllegalArgumentException if the value is invalid and its default also fails the
+   *     validator, so the default cannot be saved
+   * @throws YAML.ConfigurationException if the default has to be written and the file cannot
+   *     be saved
+   * @throws NullPointerException if called before {@link #load()}
    */
   public <T> ConfigValue<T> getConfigValue(ConfigValue<T> configValue) {
     Class<T> valueType = configValue.getValueType();
@@ -226,27 +306,49 @@ public abstract class AbstractConfig {
     clearCache();
   }
 
+  /**
+   * Logs that a value could not be loaded and, if the plugin jar contains
+   * {@code <configName>.yml}, copies it over the file in the data folder, replacing the admin's
+   * edits. The loaded values are not changed; call {@link #reload()} to read the restored file.
+   *
+   * @param configName the file name, without {@code .yml}
+   * @param configValue the path or name of the value that failed, for the message
+   * @return the logged message: {@code "[<configName>.YML] Failed to load config value:
+   *     <configValue> (INVALID VALUE)"}
+   * @throws YAML.ConfigurationException if the bundled file cannot be copied
+   */
   public String failedToLoad(String configName, String configValue) {
     return YAML.getInstance().failedToLoad(getMain(), configName, configValue);
   }
 
+  /**
+   * Same as {@link #failedToLoad(String, String)}, with your own reason in the message.
+   *
+   * @param configName the file name, without {@code .yml}
+   * @param configValue the path or name of the value that failed, for the message
+   * @param failReason why it failed, shown in parentheses
+   * @return the logged message
+   * @throws YAML.ConfigurationException if the bundled file cannot be copied
+   */
   public String failedToLoad(String configName, String configValue, String failReason) {
     return YAML.getInstance().failedToLoad(getMain(), configName, configValue, failReason);
   }
 
   /**
-   * Returns the configuration for this file.
+   * Returns Bukkit's in-memory copy of the file, for reading or setting values that have no
+   * {@link ConfigValue}. Changes are written by {@link #saveConfig()}.
    *
-   * @return the configuration for this file
+   * @return the configuration for this file, or {@code null} before {@link #load()}
    */
   public FileConfiguration getConfig() {
     return config;
   }
 
   /**
-   * Reloads the configuration file and clears the cache.
+   * Reads the file from disk again, clears the cache and calls {@link #loadData()}, so every
+   * {@link ConfigValue} field gets the file's current value. Use it for a reload command.
    *
-   * @return a message indicating that the file was reloaded
+   * @return {@code "Reloaded <name>.yml"}, for showing to the command sender
    */
   public String reload() {
     clearCache();
@@ -255,28 +357,42 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Saves the configuration to disk.
+   * Writes the in-memory configuration ({@link #getConfig()}) to the file, including changes
+   * made since it was loaded. Creates the data folder if needed.
    *
-   * <p>This method will use the last loaded configuration and any changes made to it since then.
+   * @throws YAML.ConfigurationException if the file cannot be written
    */
   public void saveConfig() {
     YAML.getInstance().saveConfig(getMain(), getConfig(), getName());
   }
 
   /**
-   * Saves the value of the given {@link ConfigValue} to the configuration file.
+   * Validates the value of {@code configValue}, stores it at its path and writes the file.
+   *
+   * <pre>{@code
+   * cooldown.setValue(20);
+   * saveValue(cooldown);
+   * }</pre>
    *
    * @param configValue the {@link ConfigValue} to save
+   * @param <T> the type of the value
+   * @throws IllegalArgumentException if the value fails its validator; nothing is saved
+   * @throws YAML.ConfigurationException if the file cannot be written
    */
   public <T> void saveValue(ConfigValue<T> configValue) {
     saveValue(configValue, true);
   }
 
   /**
-   * Saves the value of the given {@link ConfigValue} to the configuration file.
+   * Validates the value of {@code configValue} and stores it at its path, writing the file only
+   * if {@code saveToFile} is true. Pass {@code false} when saving several values, then call
+   * {@link #saveConfig()} once.
    *
    * @param configValue the {@link ConfigValue} to save
    * @param saveToFile whether to save the value to file
+   * @param <T> the type of the value
+   * @throws IllegalArgumentException if the value fails its validator; nothing is saved
+   * @throws YAML.ConfigurationException if the file cannot be written
    */
   public <T> void saveValue(ConfigValue<T> configValue, boolean saveToFile) {
     // Validate before saving if validator is set
@@ -293,13 +409,16 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Sets the value at the given path in the config to the given value.
+   * Stores a value at a path, without validation, and updates the cache. If {@code saveToFile}
+   * is true, the file is written.
    *
-   * <p>If {@code saveToFile} is true, the value is saved to the configuration file.
+   * <p>{@link ConfigValue} fields for this path are not updated; read the value again or
+   * call {@link #reload()}. Passing {@code null} removes the path.
    *
    * @param path the path to the value
    * @param value the value to set
    * @param saveToFile whether to save the value to file
+   * @throws YAML.ConfigurationException if the file cannot be written
    */
   public void saveValue(String path, Object value, boolean saveToFile) {
     getConfig().set(path, value);
@@ -315,10 +434,12 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Sets the value at the given path in the config to the given value. The value is saved to file.
+   * Stores a value at a path, without validation, and writes the file. Same as
+   * {@code saveValue(path, value, true)}.
    *
    * @param path the path to set the value at
    * @param value the value to set at the given path
+   * @throws YAML.ConfigurationException if the file cannot be written
    */
   public void saveValue(String path, Object value) {
     saveValue(path, value, true);
@@ -345,21 +466,23 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * SHOULD ALWAYS BE RAN ON PLUGIN ENABLE
+   * Reads the file and calls {@link #loadData()}. Call it once in {@code onEnable()}, before
+   * using any value. See the class description for what happens with a missing file and with
+   * invalid values.
    *
-   * <p>Loads the configuration file from the given name. Updates any data in memory to the new
-   * values in the config file.
+   * <p>Unlike {@link #reload()}, this returns nothing; otherwise they do the same work.
    *
-   * <p>This method calls {@link #loadConfig(String)} with the name returned by {@link #getName()}.
+   * @throws NullPointerException if {@link #getMain()} returns {@code null}
    */
   public void load() {
     loadConfig(getName());
   }
 
   /**
-   * Annotation for marking fields as config containers.
-   * Containers annotated with this will be automatically discovered and loaded by
-   * {@link #loadAllContainers()}.
+   * Marks a {@link ConfigValueContainer} field to be created and loaded by
+   * {@link #loadAllContainers()}. The field must be declared in your config class itself (not a
+   * superclass), and its type needs a public constructor taking
+   * {@code (AbstractConfig, String)}.
    *
    * <p>Example usage:
    * <pre>{@code
@@ -383,10 +506,14 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Automatically discovers and loads all fields annotated with {@link ConfigContainer}.
+   * Creates, loads and assigns every field annotated with {@link ConfigContainer} that is
+   * declared in this class (fields of superclasses are skipped). Each container gets its
+   * annotation value as its path prefix, and its header comment is written above its section
+   * when the file is generated.
    *
-   * <p>This method uses reflection to find all fields with the @ConfigContainer annotation,
-   * instantiates them, and calls their load() method.
+   * <p>If a container cannot be created (no public {@code (AbstractConfig, String)}
+   * constructor, or its {@code load()} throws), the error is logged and that field is left
+   * unchanged; the other containers still load.
    *
    * <p>Call this in your {@link #loadData()} implementation:
    * <pre>{@code
@@ -431,8 +558,9 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Helper method to manually load a container.
-   * This is an alternative to using {@link ConfigContainer} annotation and {@link #loadAllContainers()}.
+   * Loads a container you created yourself, as an alternative to {@link ConfigContainer} and
+   * {@link #loadAllContainers()}. A header comment set by a container loaded this way is not
+   * written to a generated file.
    *
    * <p>Usage:
    * <pre>{@code
@@ -449,8 +577,9 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Sets a file header comment that will appear at the top of the generated config file.
-   * Call this in your config's constructor or loadData() method.
+   * Sets the comment written at the top of the file when it is generated. Call this in your
+   * config's constructor or {@link #loadData()}, before the file is generated. Has no effect on
+   * an existing file until {@link #regenerateConfigFile()}.
    *
    * @param fileHeader the multi-line header comment (each line will be prefixed with #)
    */
@@ -468,8 +597,10 @@ public abstract class AbstractConfig {
   }
 
   /**
-   * Manually regenerates the config file with current values and comments.
-   * This will overwrite the existing file.
+   * Rewrites the file from the values read by the last {@link #loadData()}, with their current
+   * values, comments and headers. The file is rewritten: keys that no
+   * {@link ConfigValue} reads, and comments the admin added, are removed. Errors are logged,
+   * not thrown.
    */
   public void regenerateConfigFile() {
     File configFile = new File(getMain().getDataFolder(), getName() + EXTENSION);
