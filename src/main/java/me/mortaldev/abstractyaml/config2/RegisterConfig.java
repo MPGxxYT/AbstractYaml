@@ -44,7 +44,10 @@ public @interface RegisterConfig {
    * give config A a lower priority (e.g., 10) and config B
    * a higher priority (e.g., 20).
    *
-   * <p>Default is 100.
+   * <p>Configs with equal priority load in the order they were registered. Negative numbers
+   * are allowed.
+   *
+   * @return the priority; default 100
    */
   int priority() default 100;
 
@@ -55,6 +58,12 @@ public @interface RegisterConfig {
    * You can override it here if needed.
    *
    * <p>Example: {@code @RegisterConfig(value = "custom-name")}
+   *
+   * <p>This is the name passed to {@link ConfigManager#get(String)}. Unless {@link #path()} is
+   * set, it also sets the file name: {@code "custom-name"} is stored in
+   * {@code custom-name.yml}. {@link ConfigSchema#name()} still returns the constructor's name.
+   *
+   * @return the config name; empty (the default) to use the schema's name
    */
   String value() default "";
 
@@ -70,6 +79,12 @@ public @interface RegisterConfig {
    *   <li>{@code path = "settings/game.yml"} - saves to plugins/YourPlugin/settings/game.yml</li>
    *   <li>{@code path = ""} (default) - saves to plugins/YourPlugin/{name}.yml</li>
    * </ul>
+   *
+   * <p>The path is used exactly as written: include the {@code .yml} extension, since it is not
+   * added for you. With {@link ConfigManager#create}, the path is passed to your source
+   * function instead of being resolved against a data folder.
+   *
+   * @return the file path; empty (the default) for {@code <name>.yml}
    */
   String path() default "";
 }

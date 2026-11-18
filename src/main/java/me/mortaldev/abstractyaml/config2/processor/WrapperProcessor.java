@@ -35,6 +35,12 @@ public final class WrapperProcessor extends AbstractProcessor {
 
   private Trees trees;
 
+  /**
+   * Creates the processor. javac calls this through {@code META-INF/services}; plugins never
+   * create it themselves.
+   */
+  public WrapperProcessor() {}
+
   @Override
   public Set<String> getSupportedAnnotationTypes() {
     return Set.of(GenerateWrapper.class.getName());

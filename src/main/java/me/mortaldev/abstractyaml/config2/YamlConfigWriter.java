@@ -5,10 +5,27 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
- * Renders configuration as YAML text with proper formatting and comments.
+ * Turns config values into YAML text with comments, in the order the values were declared.
  *
  * <p>Both config systems write through this class: config2 via {@link Config#toYaml()}, and the
  * legacy {@code me.mortaldev.abstractyaml.YamlWriter} via {@link #render(String, Function, List)}.
+ * Plugins normally use {@link Config#toYaml()} or {@link Config#save(java.io.File)} instead of
+ * calling it directly.
+ *
+ * <p>Output format:
+ * <ul>
+ *   <li>Two-space indentation; dotted paths become nested keys.
+ *   <li>Text values are always double-quoted, with {@code \}, {@code "} and line breaks
+ *       escaped. Numbers and booleans are written as they are.
+ *   <li>Lists of text or maps are written one item per line; lists of numbers or booleans stay
+ *       on one line ({@code [1, 2, 3]}). Non-empty maps are written as nested keys.
+ *   <li>Keys made only of letters, digits, {@code _} and {@code -} are written plain; any other
+ *       key is quoted.
+ *   <li>A value's comment follows it on the same line. Comments on one-line values are padded
+ *       to start after the 40th character (or two spaces after a longer line); comments on
+ *       multi-line lists and maps go two spaces after the key.
+ *   <li>Top-level sections are separated from their neighbours by a blank line.
+ * </ul>
  */
 public final class YamlConfigWriter {
   private static final int COMMENT_COLUMN = 40;
@@ -17,8 +34,12 @@ public final class YamlConfigWriter {
   private YamlConfigWriter() {}
 
   /**
-   * One value to write: a dotted path, plain YAML data (String, Number, Boolean, List, Map),
-   * and an optional inline comment.
+   * One value to write.
+   *
+   * @param path the full dotted path, such as {@code "fireball.cooldown"}
+   * @param value plain YAML data: String, Number, Boolean, List or Map (lists and maps may nest
+   *     these types), or {@code null}, which is written as {@code null}
+   * @param comment the comment written after the value, or {@code null} for none
    */
   public record Entry(String path, Object value, String comment) {}
 
@@ -42,6 +63,7 @@ public final class YamlConfigWriter {
    * @param sectionHeaders returns the comment to write above a section (by full section path),
    *     or {@code null} for none
    * @param entries the values to write
+   * @return the YAML text; empty if there is no header and no entries
    * @throws IllegalArgumentException if a value is not plain YAML data
    * @throws IllegalStateException if one path is used as both a value and a section
    */

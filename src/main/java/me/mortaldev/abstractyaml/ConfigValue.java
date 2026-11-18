@@ -1,10 +1,23 @@
 package me.mortaldev.abstractyaml;
 
 /**
- * Represents a configuration value with type-safe operations.
+ * One value of a legacy config file: its path, Java type, current value, default, and optional
+ * validator and comment. Read it into an {@link AbstractConfig} with
+ * {@link AbstractConfig#getConfigValue(ConfigValue)}:
  *
- * <p>This class provides a wrapper around configuration values that maintains type information at
- * runtime, allowing for safe retrieval and storage of configuration data.
+ * <pre>{@code
+ * cooldown = getConfigValue(new ConfigValue<>("cooldown", Integer.class, 10)
+ *     .setValidator(ConfigValidator.range(1, 300))
+ *     .setComment("Seconds between uses"));
+ * int seconds = cooldown.getValue();
+ * }</pre>
+ *
+ * <p>The type is passed as a class ({@code Integer.class}, {@code String.class},
+ * {@code List.class}, {@code Map.class}) because generic types are erased at runtime. Use
+ * wrapper classes, not primitives: {@code Integer.class}, not {@code int.class}.
+ *
+ * <p>Unlike config2 values, this object is mutable and is changed by loading. It is not
+ * thread-safe.
  *
  * @param <T> the type of the configuration value
  * @deprecated Part of the legacy config system. Use {@code me.mortaldev.abstractyaml.config2.ConfigValue}.
@@ -46,34 +59,68 @@ public class ConfigValue<T> {
     this(id, valueType, defaultValue, defaultValue);
   }
 
+  /**
+   * Returns the path of this value in the file, such as {@code "game.max-players"}.
+   *
+   * @return the path given to the constructor
+   */
   public String getId() {
     return id;
   }
 
+  /**
+   * Returns the type the file's value must have.
+   *
+   * @return the class given to the constructor
+   */
   public Class<T> getValueType() {
     return valueType;
   }
 
+  /**
+   * Returns the current value: the one read by
+   * {@link AbstractConfig#getConfigValue(ConfigValue)}, or the last one passed to
+   * {@link #setValue(Object)}.
+   *
+   * @return the current value
+   */
   public T getValue() {
     return value;
   }
 
+  /**
+   * Returns the value used when the file's value is missing, of the wrong type or invalid.
+   *
+   * @return the default value
+   */
   public T getDefaultValue() {
     return defaultValue;
   }
 
+  /**
+   * Changes the current value in memory only, without validation. Call
+   * {@link AbstractConfig#saveValue(ConfigValue)} to validate it and write it to the file.
+   *
+   * @param value the new value
+   */
   public void setValue(T value) {
     this.value = value;
   }
 
+  /**
+   * Changes the default value. The current value is not changed.
+   *
+   * @param defaultValue the new default
+   */
   public void setDefaultValue(T defaultValue) {
     this.defaultValue = defaultValue;
   }
 
   /**
-   * Sets a validator for this config value.
+   * Sets the validator that loading and {@link AbstractConfig#saveValue(ConfigValue)} check the
+   * value with. Replaces any earlier validator.
    *
-   * @param validator the validator to use
+   * @param validator the validator to use, or {@code null} for none
    * @return this ConfigValue for method chaining
    */
   public ConfigValue<T> setValidator(ConfigValidator<T> validator) {
@@ -112,9 +159,9 @@ public class ConfigValue<T> {
   }
 
   /**
-   * Sets an inline comment for this config value.
+   * Sets the comment written after this value when the file is generated.
    *
-   * @param comment the comment to display inline with the value
+   * @param comment the comment to display inline with the value, without {@code #}
    * @return this ConfigValue for method chaining
    */
   public ConfigValue<T> setComment(String comment) {

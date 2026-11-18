@@ -4,7 +4,17 @@ import java.util.List;
 import java.util.function.Predicate;
 
 /**
- * Helper class providing common validators for List-type ConfigValues.
+ * Ready-made validators for legacy {@link ConfigValue}s of type {@code List}.
+ *
+ * <pre>{@code
+ * new ConfigValue<>("worlds", List.class, List.of("world"))
+ *     .setValidator(ListValidators.allStringsNotEmpty());
+ * }</pre>
+ *
+ * <p>Every validator starts with a {@code null} check (message {@code "Value cannot be null"}).
+ * Rules stop at the first failure, so a list with a wrong element type reports the type rule,
+ * not the range rule after it. The validators use the raw {@code List} type, matching
+ * {@code List.class}.
  *
  * @deprecated Part of the legacy config system. Use the list validators on
  *     {@code me.mortaldev.abstractyaml.config2.Validator}.
@@ -12,8 +22,15 @@ import java.util.function.Predicate;
 @Deprecated
 public class ListValidators {
 
+  /** Not needed: every method is static. Kept public so existing code still compiles. */
+  public ListValidators() {}
+
   /**
-   * Validates that a list is not empty and has at least the specified number of elements.
+   * Requires at least {@code minSize} elements. Message:
+   * {@code "List must have at least <minSize> elements"}.
+   *
+   * @param minSize the smallest allowed size
+   * @return a new validator
    */
   public static ConfigValidator<List> minSize(int minSize) {
     return ConfigValidator.<List>notNull()
@@ -21,7 +38,11 @@ public class ListValidators {
   }
 
   /**
-   * Validates that a list does not exceed the specified number of elements.
+   * Requires at most {@code maxSize} elements. Message:
+   * {@code "List cannot exceed <maxSize> elements"}.
+   *
+   * @param maxSize the largest allowed size
+   * @return a new validator
    */
   public static ConfigValidator<List> maxSize(int maxSize) {
     return ConfigValidator.<List>notNull()
@@ -29,7 +50,12 @@ public class ListValidators {
   }
 
   /**
-   * Validates that a list size is within the specified range.
+   * Requires a size between {@code min} and {@code max}, both included. Message:
+   * {@code "List size must be between <min> and <max>"}.
+   *
+   * @param min the smallest allowed size
+   * @param max the largest allowed size
+   * @return a new validator
    */
   public static ConfigValidator<List> sizeRange(int min, int max) {
     return ConfigValidator.<List>notNull()
@@ -39,7 +65,11 @@ public class ListValidators {
   }
 
   /**
-   * Validates that all elements in the list are of the specified type.
+   * Requires every element to be an instance of {@code type}; {@code null} elements fail.
+   * Message: {@code "All elements must be of type <SimpleName>"}.
+   *
+   * @param type the required element class, such as {@code String.class}
+   * @return a new validator
    */
   public static ConfigValidator<List> allInstanceOf(Class<?> type) {
     return ConfigValidator.<List>notNull()
@@ -49,7 +79,10 @@ public class ListValidators {
   }
 
   /**
-   * Validates that all String elements in the list are not empty.
+   * Requires every element to be text with at least one non-whitespace character. Messages:
+   * {@code "All elements must be strings"}, then {@code "All strings must be non-empty"}.
+   *
+   * @return a new validator
    */
   public static ConfigValidator<List> allStringsNotEmpty() {
     return ConfigValidator.<List>notNull()
@@ -68,7 +101,13 @@ public class ListValidators {
   }
 
   /**
-   * Validates that all Integer elements in the list are within the specified range.
+   * Requires every element to be an {@code Integer} between {@code min} and {@code max}, both
+   * included. Messages: {@code "All elements must be integers"}, then
+   * {@code "All integers must be between <min> and <max>"}.
+   *
+   * @param min the smallest allowed value
+   * @param max the largest allowed value
+   * @return a new validator
    */
   public static ConfigValidator<List> allIntegersInRange(int min, int max) {
     return ConfigValidator.<List>notNull()
@@ -87,7 +126,13 @@ public class ListValidators {
   }
 
   /**
-   * Validates that all Double/Number elements in the list are within the specified range.
+   * Requires every element to be a number (any {@code Number}) between {@code min} and
+   * {@code max}, both included. Messages: {@code "All elements must be numbers"}, then
+   * {@code "All numbers must be between <min> and <max>"}.
+   *
+   * @param min the smallest allowed value
+   * @param max the largest allowed value
+   * @return a new validator
    */
   public static ConfigValidator<List> allDoublesInRange(double min, double max) {
     return ConfigValidator.<List>notNull()
@@ -109,7 +154,18 @@ public class ListValidators {
   }
 
   /**
-   * Validates that all elements in the list match the given predicate.
+   * Requires every element to be an instance of {@code type} and to pass {@code predicate}.
+   * Messages: {@code "All elements must be of type <SimpleName>"}, then {@code errorMessage}.
+   *
+   * <pre>{@code
+   * ListValidators.allMatch(String.class, s -> s.startsWith("minecraft:"), "Use namespaced IDs")
+   * }</pre>
+   *
+   * @param type the required element class
+   * @param predicate returns {@code true} for valid elements
+   * @param errorMessage the message when an element fails {@code predicate}
+   * @param <T> the element type
+   * @return a new validator
    */
   public static <T> ConfigValidator<List> allMatch(Class<T> type, Predicate<T> predicate, String errorMessage) {
     return ConfigValidator.<List>notNull()
@@ -130,7 +186,10 @@ public class ListValidators {
   }
 
   /**
-   * Validates that the list contains no duplicate elements.
+   * Requires no repeated elements, compared with {@code equals} (case-sensitive for text).
+   * Message: {@code "List cannot contain duplicate elements"}.
+   *
+   * @return a new validator
    */
   public static ConfigValidator<List> noDuplicates() {
     return ConfigValidator.<List>notNull()
@@ -140,7 +199,10 @@ public class ListValidators {
   }
 
   /**
-   * Validates that all Boolean elements exist (no nulls).
+   * Requires every element to be a {@code Boolean}; {@code null} elements fail. Message:
+   * {@code "All elements must be booleans"}.
+   *
+   * @return a new validator
    */
   public static ConfigValidator<List> allBooleansValid() {
     return ConfigValidator.<List>notNull()
@@ -150,7 +212,11 @@ public class ListValidators {
   }
 
   /**
-   * Validates that String list elements match a regex pattern.
+   * Requires every element to be text that matches {@code regex} in full. Messages:
+   * {@code "All elements must be strings"}, then {@code "All strings must match pattern: <regex>"}.
+   *
+   * @param regex a {@link java.util.regex.Pattern} expression, compiled on each check
+   * @return a new validator
    */
   public static ConfigValidator<List> allStringsMatch(String regex) {
     return ConfigValidator.<List>notNull()
@@ -169,7 +235,13 @@ public class ListValidators {
   }
 
   /**
-   * Combines multiple validators for common List<String> use cases.
+   * Requires a list of text whose size is between {@code minSize} and {@code maxSize}. Same as
+   * {@link #sizeRange(int, int)} followed by a check that every element is text (message
+   * {@code "All elements must be strings"}). Empty text is allowed.
+   *
+   * @param minSize the smallest allowed size
+   * @param maxSize the largest allowed size
+   * @return a new validator
    */
   public static ConfigValidator<List> stringList(int minSize, int maxSize) {
     return sizeRange(minSize, maxSize)
@@ -179,7 +251,15 @@ public class ListValidators {
   }
 
   /**
-   * Combines multiple validators for common List<Integer> use cases.
+   * Requires a list of {@code Integer}s whose size is between {@code minSize} and
+   * {@code maxSize} and whose elements are between {@code minValue} and {@code maxValue}, all
+   * bounds included.
+   *
+   * @param minSize the smallest allowed size
+   * @param maxSize the largest allowed size
+   * @param minValue the smallest allowed element
+   * @param maxValue the largest allowed element
+   * @return a new validator
    */
   public static ConfigValidator<List> integerList(int minSize, int maxSize, int minValue, int maxValue) {
     return sizeRange(minSize, maxSize)

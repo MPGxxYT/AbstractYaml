@@ -8,14 +8,74 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * Base interface for all configuration values.
- * Provides type-safe access to configuration data without casting.
+ * One value in a config file: its path, its current value, its default, an optional comment for
+ * the generated file, and a validator.
  *
- * <p>Each value type owns the conversion from plain YAML data (String, Number, Boolean, List,
- * Map) to its own Java type through {@link #read(Object)}. Because the interface is sealed and
- * {@code read} is abstract, a new value type cannot compile until it says how it is read.
+ * <p>You declare values in a {@link ConfigSchema}, either directly with
+ * {@code value(new ConfigValue.Int("fireball.cooldown", 10, "Seconds between casts"))} or through
+ * {@link ConfigSchema.SectionBuilder} methods such as {@code intValue(...)}. You read them back
+ * through the typed getters of {@link ConfigView} ({@code getInt}, {@code getStringList}, ...).
  *
- * @param <T> the type of the configuration value
+ * <p>Every value is an immutable record. Changing a value ({@link #withValue}, {@link #read})
+ * returns a new instance; the original is never modified.
+ *
+ * <h2>Types</h2>
+ *
+ * <table>
+ *   <caption>Value types, their Java type and the getter that reads them</caption>
+ *   <tr><th>Record</th><th>Java type</th><th>Getter</th></tr>
+ *   <tr><td>{@link String}</td><td>{@code java.lang.String}</td><td>{@code getString}</td></tr>
+ *   <tr><td>{@link Int}</td><td>{@code Integer}</td><td>{@code getInt}</td></tr>
+ *   <tr><td>{@link Double}</td><td>{@code java.lang.Double}</td><td>{@code getDouble}</td></tr>
+ *   <tr><td>{@link Boolean}</td><td>{@code java.lang.Boolean}</td><td>{@code getBoolean}</td></tr>
+ *   <tr><td>{@link StringList}</td><td>{@code List<String>}</td><td>{@code getStringList}</td></tr>
+ *   <tr><td>{@link IntList}</td><td>{@code List<Integer>}</td><td>{@code getIntList}</td></tr>
+ *   <tr><td>{@link DoubleList}</td><td>{@code List<Double>}</td><td>{@code getDoubleList}</td></tr>
+ *   <tr><td>{@link MapList}</td><td>{@code List<Map<String, Object>>}</td>
+ *       <td>{@code getMapList}</td></tr>
+ *   <tr><td>{@link MapValue}</td><td>{@code Map<String, Object>}</td><td>{@code getMap}</td></tr>
+ *   <tr><td>{@link StringMap}</td><td>{@code Map<String, String>}</td>
+ *       <td>{@code getStringMap}</td></tr>
+ *   <tr><td>{@link IntMap}</td><td>{@code Map<String, Integer>}</td><td>{@code getIntMap}</td></tr>
+ * </table>
+ *
+ * <p>Inside this file the record {@code String} hides {@code java.lang.String}, which is why the
+ * signatures here spell out {@code java.lang.String}. Your own code is not affected: it refers to
+ * the record as {@code ConfigValue.String}.
+ *
+ * <h2>Paths</h2>
+ *
+ * <p>A path is the value's key in the file, with dots between nesting levels:
+ * {@code "fireball.damage.base"} is the {@code base} key inside {@code damage} inside
+ * {@code fireball}. A path cannot be both a value and a section; for example, declaring both
+ * {@code "fireball"} and {@code "fireball.cooldown"} makes rendering the file throw
+ * {@link IllegalStateException}.
+ *
+ * <h2>Reading from the file</h2>
+ *
+ * <p>When a config loads, each value converts the YAML data at its path with {@link #read}. The
+ * conversion accepts anything it can convert without losing information and rejects the rest:
+ * <ul>
+ *   <li>Integers accept whole numbers in the {@code int} range, including {@code 5.0} and the
+ *       text {@code "5"}. {@code 10.7} is rejected.
+ *   <li>Doubles accept any number and numeric text such as {@code "2.5"}.
+ *   <li>Booleans accept {@code true} and {@code false}, and the text {@code "true"} or
+ *       {@code "false"} in any letter case.
+ *   <li>Strings accept text, numbers and booleans ({@code 5} reads as {@code "5"}).
+ *   <li>Lists and maps convert each element with the rules above.
+ * </ul>
+ *
+ * <p>If the data cannot be converted, {@link ConfigLoader} logs a warning and keeps the default
+ * for that value; the file is not changed. If the data converts but the {@link #validator()}
+ * rejects it, loading fails with {@link ConfigLoader.ConfigLoadException}.
+ *
+ * <h2>Defaults</h2>
+ *
+ * <p>Lists and maps given as defaults are stored as they are, not copied. Pass an unmodifiable
+ * collection ({@code List.of(...)}, {@code Map.of(...)}) so the default cannot change after the
+ * schema is built. Values read from a file are always unmodifiable.
+ *
+ * @param <T> the Java type of the value, such as {@code Integer} or {@code List<String>}
  */
 public sealed interface ConfigValue<T> permits
     ConfigValue.String,
@@ -31,49 +91,75 @@ public sealed interface ConfigValue<T> permits
     ConfigValue.IntMap {
 
   /**
-   * The configuration path for this value (e.g., "keraunos.cooldown").
+   * Returns the full dotted path of this value in the file, such as
+   * {@code "fireball.cooldown"}.
+   *
+   * @return the path, never {@code null}
    */
   java.lang.String path();
 
   /**
-   * The current value.
+   * Returns the current value: the value read from the file, or the default if the file had no
+   * usable value at this path.
+   *
+   * @return the current value
    */
   T value();
 
   /**
-   * The default value used when the config is missing or invalid.
+   * Returns the default value given when the schema declared this value. It is used when the
+   * file is created, when the path is missing from the file, and when the data at the path
+   * cannot be converted to this type.
+   *
+   * @return the default value
    */
   T defaultValue();
 
   /**
-   * Optional comment to display in the generated YAML file.
+   * Returns the comment written after this value in the generated file, such as
+   * {@code cooldown: 10  # Seconds between casts}.
+   *
+   * @return the comment, or {@code null} if the value has none
    */
   java.lang.String comment();
 
   /**
-   * Validator for this config value.
+   * Returns the validator that checks this value on load and on {@link Config#with}.
+   *
+   * @return the validator; {@link Validator#none()} if none was given, never {@code null}
    */
   Validator<T> validator();
 
   /**
-   * Creates a new ConfigValue with a different value.
-   * ConfigValues are immutable, so this returns a new instance.
+   * Returns a copy of this value with {@code newValue} as its value. The path, default, comment and
+   * validator are kept. The new value is neither converted nor validated; use {@link #read} to
+   * convert and {@link #validate()} to check it.
+   *
+   * @param newValue the new current value
+   * @return a new instance; this one is unchanged
    */
   ConfigValue<T> withValue(T newValue);
 
   /**
-   * Creates a new ConfigValue holding {@code raw} converted to this value's type.
+   * Returns a copy of this value with {@code raw}, converted to this value's type, as its value.
    *
    * <p>{@code raw} is plain YAML data as produced by a YAML parser: String, Number, Boolean,
    * List or Map. Conversion is lenient where no information is lost (a whole {@code 5.0} reads
-   * as the int {@code 5}, a numeric string reads as a number) and strict otherwise.
+   * as the int {@code 5}, a numeric string reads as a number) and strict otherwise. See
+   * "Reading from the file" above for the rules of each type. The result is not validated.
    *
-   * @throws IllegalArgumentException if {@code raw} cannot be converted to this type
+   * @param raw the YAML data to convert
+   * @return a new instance with the converted value; this one is unchanged
+   * @throws IllegalArgumentException if {@code raw} cannot be converted to this type. The
+   *     message says what was expected and what was found, and for lists and maps which element
+   *     or key failed.
    */
   ConfigValue<T> read(Object raw);
 
   /**
-   * Validates the current value.
+   * Checks the current value with this value's {@link #validator()}.
+   *
+   * @return the result; {@link ValidationResult#isValid()} is {@code true} if the value passes
    */
   default ValidationResult validate() {
     return validator().validate(value());
@@ -201,6 +287,23 @@ public sealed interface ConfigValue<T> permits
 
   // ===== Concrete Implementations =====
 
+  /**
+   * A text value, read with {@link ConfigView#getString(java.lang.String)}.
+   *
+   * <p>Reads YAML text, and also numbers and booleans, which become their text form
+   * ({@code 5} reads as {@code "5"}, {@code true} as {@code "true"}). Lists and maps are
+   * rejected. The value is always written to the file in double quotes.
+   *
+   * <pre>
+   * prefix: "[Server] "
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "chat.prefix"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record String(
       java.lang.String path,
       java.lang.String value,
@@ -208,18 +311,50 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<java.lang.String> validator) implements ConfigValue<java.lang.String> {
 
+    /**
+     * Creates a text value with every field given. Most code uses the shorter constructors,
+     * which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public String {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a text value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "chat.prefix"}
+     * @param defaultValue the default, also used as the starting value
+     */
     public String(java.lang.String path, java.lang.String defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a text value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "chat.prefix"}
+     * @param defaultValue the default, also used as the starting value
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public String(java.lang.String path, java.lang.String defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a text value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "chat.prefix"}
+     * @param defaultValue the default, also used as the starting value. It must pass
+     *     {@code validator}, or loading fails.
+     * @param validator checks the value, for example {@link Validator#notEmpty()}
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public String(
         java.lang.String path,
         java.lang.String defaultValue,
@@ -239,6 +374,22 @@ public sealed interface ConfigValue<T> permits
     }
   }
 
+  /**
+   * A whole number in the {@code int} range, read with {@link ConfigView#getInt(java.lang.String)}.
+   *
+   * <p>Reads whole numbers, including {@code 5.0} and the text {@code "5"}. A number with a
+   * fraction ({@code 10.7}) or outside the {@code int} range is rejected, not rounded.
+   *
+   * <pre>
+   * cooldown: 10
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "fireball.cooldown"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record Int(
       java.lang.String path,
       Integer value,
@@ -246,18 +397,50 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<Integer> validator) implements ConfigValue<Integer> {
 
+    /**
+     * Creates an integer value with every field given. Most code uses the shorter constructors,
+     * which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public Int {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates an integer value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.cooldown"}
+     * @param defaultValue the default, also used as the starting value
+     */
     public Int(java.lang.String path, int defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates an integer value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.cooldown"}
+     * @param defaultValue the default, also used as the starting value
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public Int(java.lang.String path, int defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates an integer value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "fireball.cooldown"}
+     * @param defaultValue the default, also used as the starting value. It must pass
+     *     {@code validator}, or loading fails.
+     * @param validator checks the value, for example {@code Validator.range(1, 300)}
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public Int(
         java.lang.String path,
         int defaultValue,
@@ -277,6 +460,23 @@ public sealed interface ConfigValue<T> permits
     }
   }
 
+  /**
+   * A decimal number, read with {@link ConfigView#getDouble(java.lang.String)}.
+   *
+   * <p>Reads any number ({@code 3}, {@code 3.5}) and numeric text ({@code "3.5"}). Text is parsed
+   * with {@link java.lang.Double#parseDouble(java.lang.String)}, so {@code "NaN"} and
+   * {@code "Infinity"} are accepted too; add a range validator to rule them out.
+   *
+   * <pre>
+   * radius: 3.0
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "fireball.radius"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record Double(
       java.lang.String path,
       java.lang.Double value,
@@ -284,18 +484,51 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<java.lang.Double> validator) implements ConfigValue<java.lang.Double> {
 
+    /**
+     * Creates a decimal value with every field given. Most code uses the shorter constructors,
+     * which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public Double {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a decimal value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.radius"}
+     * @param defaultValue the default, also used as the starting value
+     */
     public Double(java.lang.String path, double defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a decimal value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.radius"}
+     * @param defaultValue the default, also used as the starting value
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public Double(java.lang.String path, double defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a decimal value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "fireball.radius"}
+     * @param defaultValue the default, also used as the starting value. It must pass
+     *     {@code validator}, or loading fails.
+     * @param validator checks the value, for example {@code Validator.min(0.0)}. Use double
+     *     literals: {@code Validator.min(0)} picks the integer overload and does not compile here.
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public Double(
         java.lang.String path,
         double defaultValue,
@@ -315,6 +548,22 @@ public sealed interface ConfigValue<T> permits
     }
   }
 
+  /**
+   * A true/false value, read with {@link ConfigView#getBoolean(java.lang.String)}.
+   *
+   * <p>Reads {@code true} and {@code false}, and the text {@code "true"} or {@code "false"} in
+   * any letter case. Anything else, including {@code 1} and {@code 0}, is rejected.
+   *
+   * <pre>
+   * enabled: true
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "fireball.enabled"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record Boolean(
       java.lang.String path,
       java.lang.Boolean value,
@@ -322,18 +571,50 @@ public sealed interface ConfigValue<T> permits
       java.lang.String comment,
       Validator<java.lang.Boolean> validator) implements ConfigValue<java.lang.Boolean> {
 
+    /**
+     * Creates a true/false value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public Boolean {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a true/false value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.enabled"}
+     * @param defaultValue the default, also used as the starting value
+     */
     public Boolean(java.lang.String path, boolean defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a true/false value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.enabled"}
+     * @param defaultValue the default, also used as the starting value
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public Boolean(java.lang.String path, boolean defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a true/false value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "fireball.enabled"}
+     * @param defaultValue the default, also used as the starting value. It must pass
+     *     {@code validator}, or loading fails.
+     * @param validator checks the value
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public Boolean(
         java.lang.String path,
         boolean defaultValue,
@@ -353,6 +634,25 @@ public sealed interface ConfigValue<T> permits
     }
   }
 
+  /**
+   * A list of text values, read with {@link ConfigView#getStringList(java.lang.String)}.
+   *
+   * <p>Reads a YAML list; each element follows the {@link String} rules, so numbers and booleans
+   * become text. A single value that is not a list is rejected, as is a list containing a list
+   * or map. The list read from the file is unmodifiable.
+   *
+   * <pre>
+   * allowed-items:
+   *   - "DIAMOND_SWORD"
+   *   - "IRON_SWORD"
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "fireball.allowed-items"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record StringList(
       java.lang.String path,
       List<java.lang.String> value,
@@ -361,19 +661,53 @@ public sealed interface ConfigValue<T> permits
       Validator<List<java.lang.String>> validator)
       implements ConfigValue<List<java.lang.String>> {
 
+    /**
+     * Creates a text list value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public StringList {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a text list value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.allowed-items"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}.
+     */
     public StringList(java.lang.String path, List<java.lang.String> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a text list value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "fireball.allowed-items"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}.
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public StringList(
         java.lang.String path, List<java.lang.String> defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a text list value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "fireball.allowed-items"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}. It must pass {@code validator}, or loading fails.
+     * @param validator checks the value, for example {@link Validator#allStringsNotEmpty()}
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public StringList(
         java.lang.String path,
         List<java.lang.String> defaultValue,
@@ -393,6 +727,22 @@ public sealed interface ConfigValue<T> permits
     }
   }
 
+  /**
+   * A list of whole numbers, read with {@link ConfigView#getIntList(java.lang.String)}.
+   *
+   * <p>Reads a YAML list; each element follows the {@link Int} rules. One bad element rejects
+   * the list, and the error names its index. The list read from the file is unmodifiable.
+   *
+   * <pre>
+   * levels: [1, 5, 10]
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "rewards.levels"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record IntList(
       java.lang.String path,
       List<Integer> value,
@@ -401,18 +751,52 @@ public sealed interface ConfigValue<T> permits
       Validator<List<Integer>> validator)
       implements ConfigValue<List<Integer>> {
 
+    /**
+     * Creates an integer list value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public IntList {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates an integer list value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "rewards.levels"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}.
+     */
     public IntList(java.lang.String path, List<Integer> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates an integer list value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "rewards.levels"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}.
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public IntList(java.lang.String path, List<Integer> defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates an integer list value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "rewards.levels"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}. It must pass {@code validator}, or loading fails.
+     * @param validator checks the value, for example {@code Validator.allIntegersInRange(1, 100)}
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public IntList(
         java.lang.String path,
         List<Integer> defaultValue,
@@ -432,6 +816,22 @@ public sealed interface ConfigValue<T> permits
     }
   }
 
+  /**
+   * A list of decimal numbers, read with {@link ConfigView#getDoubleList(java.lang.String)}.
+   *
+   * <p>Reads a YAML list; each element follows the {@link Double} rules. One bad element rejects
+   * the list, and the error names its index. The list read from the file is unmodifiable.
+   *
+   * <pre>
+   * multipliers: [1.0, 1.5, 2.0]
+   * </pre>
+   *
+   * @param path the full dotted path, such as {@code "rewards.multipliers"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
+   */
   record DoubleList(
       java.lang.String path,
       List<java.lang.Double> value,
@@ -440,19 +840,54 @@ public sealed interface ConfigValue<T> permits
       Validator<List<java.lang.Double>> validator)
       implements ConfigValue<List<java.lang.Double>> {
 
+    /**
+     * Creates a decimal list value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public DoubleList {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a decimal list value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "rewards.multipliers"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}.
+     */
     public DoubleList(java.lang.String path, List<java.lang.Double> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a decimal list value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "rewards.multipliers"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}.
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public DoubleList(
         java.lang.String path, List<java.lang.Double> defaultValue, java.lang.String comment) {
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a decimal list value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "rewards.multipliers"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(...)}. It must pass {@code validator}, or loading fails.
+     * @param validator checks the value, for example
+     *     {@code Validator.allDoublesInRange(0.0, 10.0)}
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public DoubleList(
         java.lang.String path,
         List<java.lang.Double> defaultValue,
@@ -473,8 +908,8 @@ public sealed interface ConfigValue<T> permits
   }
 
   /**
-   * List of maps (objects) - useful for complex configuration structures.
-   * Example YAML:
+   * A list of objects with named fields, read with {@link ConfigView#getMapList(java.lang.String)}.
+   *
    * <pre>
    * points:
    *   - name: "point1"
@@ -484,6 +919,17 @@ public sealed interface ConfigValue<T> permits
    *     radius: 5.0
    *     duration: 200
    * </pre>
+   *
+   * <p>Reads a YAML list whose elements are all maps. Keys become text; values stay as the YAML
+   * parser gave them (String, Integer, Double, Boolean, List or Map), so check or convert each
+   * field yourself, for example {@code ((Number) point.get("radius")).doubleValue()}. Nested
+   * lists and maps are copied and unmodifiable, and keep the order they have in the file.
+   *
+   * @param path the full dotted path, such as {@code "capture.points"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
    */
   record MapList(
       java.lang.String path,
@@ -493,14 +939,41 @@ public sealed interface ConfigValue<T> permits
       Validator<List<Map<java.lang.String, Object>>> validator)
       implements ConfigValue<List<Map<java.lang.String, Object>>> {
 
+    /**
+     * Creates a map list value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public MapList {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a map list value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "capture.points"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(Map.of(...))}. Use only String, Number, Boolean, List and Map inside,
+     *     or writing the file fails.
+     */
     public MapList(java.lang.String path, List<Map<java.lang.String, Object>> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a map list value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "capture.points"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(Map.of(...))}. Use only String, Number, Boolean, List and Map inside,
+     *     or writing the file fails.
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public MapList(
         java.lang.String path,
         List<Map<java.lang.String, Object>> defaultValue,
@@ -508,6 +981,16 @@ public sealed interface ConfigValue<T> permits
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a map list value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "capture.points"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code List.of(Map.of(...))}. Use only String, Number, Boolean, List and Map inside,
+     *     or writing the file fails. It must pass {@code validator}, or loading fails.
+     * @param validator checks the value, for example {@code Validator.minSize(1)}
+     * @param comment the comment written after the value in the file, or {@code null} for none
+     */
     public MapList(
         java.lang.String path,
         List<Map<java.lang.String, Object>> defaultValue,
@@ -529,14 +1012,26 @@ public sealed interface ConfigValue<T> permits
   }
 
   /**
-   * Single map/object - useful for configuration objects.
-   * Example YAML:
+   * One object with named fields of any YAML type, read with
+   * {@link ConfigView#getMap(java.lang.String)}.
+   *
    * <pre>
    * player-stats:
    *   health: 20
    *   mana: 100
-   *   level: 5
+   *   title: "Novice"
    * </pre>
+   *
+   * <p>Reads a YAML map. Keys become text; values stay as the YAML parser gave them (String,
+   * Integer, Double, Boolean, List or Map). When every value has the same type, prefer
+   * {@link StringMap} or {@link IntMap}, which convert and check each value for you. The map read
+   * from the file is unmodifiable and keeps the file's key order.
+   *
+   * @param path the full dotted path, such as {@code "player-stats"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
    */
   record MapValue(
       java.lang.String path,
@@ -546,14 +1041,41 @@ public sealed interface ConfigValue<T> permits
       Validator<Map<java.lang.String, Object>> validator)
       implements ConfigValue<Map<java.lang.String, Object>> {
 
+    /**
+     * Creates a map value with every field given. Most code uses the shorter constructors,
+     * which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public MapValue {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a map value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "player-stats"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file. Use
+     *     only String, Number, Boolean, List and Map values, or writing the file fails.
+     */
     public MapValue(java.lang.String path, Map<java.lang.String, Object> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a map value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "player-stats"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file. Use
+     *     only String, Number, Boolean, List and Map values, or writing the file fails.
+     * @param comment the comment written after the key in the file, or {@code null} for none
+     */
     public MapValue(
         java.lang.String path,
         Map<java.lang.String, Object> defaultValue,
@@ -561,6 +1083,18 @@ public sealed interface ConfigValue<T> permits
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a map value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "player-stats"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file. Use
+     *     only String, Number, Boolean, List and Map values, or writing the file fails. It must
+     *     pass {@code validator}, or loading fails.
+     * @param validator checks the value, for example
+     *     {@code Validator.of(m -> m.containsKey("health"), "health is required")}
+     * @param comment the comment written after the key in the file, or {@code null} for none
+     */
     public MapValue(
         java.lang.String path,
         Map<java.lang.String, Object> defaultValue,
@@ -582,14 +1116,24 @@ public sealed interface ConfigValue<T> permits
   }
 
   /**
-   * String-to-String map - useful for simple key-value configurations.
-   * Example YAML:
+   * A map from text keys to text values, read with
+   * {@link ConfigView#getStringMap(java.lang.String)}.
+   *
    * <pre>
    * team-colors:
    *   red: "#FF0000"
    *   blue: "#0000FF"
-   *   green: "#00FF00"
    * </pre>
+   *
+   * <p>Reads a YAML map; each value follows the {@link String} rules, so numbers and booleans
+   * become text. A list or map as a value rejects the map, and the error names the key.
+   * The map read from the file is unmodifiable and keeps the file's key order.
+   *
+   * @param path the full dotted path, such as {@code "team-colors"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
    */
   record StringMap(
       java.lang.String path,
@@ -599,14 +1143,39 @@ public sealed interface ConfigValue<T> permits
       Validator<Map<java.lang.String, java.lang.String>> validator)
       implements ConfigValue<Map<java.lang.String, java.lang.String>> {
 
+    /**
+     * Creates a text map value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public StringMap {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates a text map value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "team-colors"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file.
+     */
     public StringMap(java.lang.String path, Map<java.lang.String, java.lang.String> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates a text map value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "team-colors"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file.
+     * @param comment the comment written after the key in the file, or {@code null} for none
+     */
     public StringMap(
         java.lang.String path,
         Map<java.lang.String, java.lang.String> defaultValue,
@@ -614,6 +1183,16 @@ public sealed interface ConfigValue<T> permits
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates a text map value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "team-colors"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file. It
+     *     must pass {@code validator}, or loading fails.
+     * @param validator checks the value
+     * @param comment the comment written after the key in the file, or {@code null} for none
+     */
     public StringMap(
         java.lang.String path,
         Map<java.lang.String, java.lang.String> defaultValue,
@@ -635,14 +1214,24 @@ public sealed interface ConfigValue<T> permits
   }
 
   /**
-   * String-to-Integer map - useful for numeric mappings.
-   * Example YAML:
+   * A map from text keys to whole numbers, read with
+   * {@link ConfigView#getIntMap(java.lang.String)}.
+   *
    * <pre>
    * class-levels:
    *   warrior: 10
    *   mage: 8
-   *   archer: 12
    * </pre>
+   *
+   * <p>Reads a YAML map; each value follows the {@link Int} rules. One bad value rejects the
+   * map, and the error names the key. The map read from the file is unmodifiable and keeps
+   * the file's key order.
+   *
+   * @param path the full dotted path, such as {@code "class-levels"}
+   * @param value the current value
+   * @param defaultValue the value used when the file has no usable value at {@code path}
+   * @param comment the comment written after the value in the file, or {@code null} for none
+   * @param validator checks the value; {@code null} means {@link Validator#none()}
    */
   record IntMap(
       java.lang.String path,
@@ -652,14 +1241,39 @@ public sealed interface ConfigValue<T> permits
       Validator<Map<java.lang.String, Integer>> validator)
       implements ConfigValue<Map<java.lang.String, Integer>> {
 
+    /**
+     * Creates an integer map value with every field given. Most code uses the shorter
+     * constructors, which set {@code value} to {@code defaultValue}.
+     *
+     * @param path the full dotted path
+     * @param value the current value
+     * @param defaultValue the default value
+     * @param comment the file comment, or {@code null} for none
+     * @param validator the validator, or {@code null} for {@link Validator#none()}
+     */
     public IntMap {
       validator = validator != null ? validator : Validator.none();
     }
 
+    /**
+     * Creates an integer map value with no comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "class-levels"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file.
+     */
     public IntMap(java.lang.String path, Map<java.lang.String, Integer> defaultValue) {
       this(path, defaultValue, defaultValue, null, null);
     }
 
+    /**
+     * Creates an integer map value with a comment and no validator.
+     *
+     * @param path the full dotted path, such as {@code "class-levels"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file.
+     * @param comment the comment written after the key in the file, or {@code null} for none
+     */
     public IntMap(
         java.lang.String path,
         Map<java.lang.String, Integer> defaultValue,
@@ -667,6 +1281,16 @@ public sealed interface ConfigValue<T> permits
       this(path, defaultValue, defaultValue, comment, null);
     }
 
+    /**
+     * Creates an integer map value with a validator and a comment.
+     *
+     * @param path the full dotted path, such as {@code "class-levels"}
+     * @param defaultValue the default, also used as the starting value. Stored as given; pass
+     *     {@code Map.of(...)}, or a {@code LinkedHashMap} to control the order in the file. It
+     *     must pass {@code validator}, or loading fails.
+     * @param validator checks the value
+     * @param comment the comment written after the key in the file, or {@code null} for none
+     */
     public IntMap(
         java.lang.String path,
         Map<java.lang.String, Integer> defaultValue,

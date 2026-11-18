@@ -1,5 +1,23 @@
 # AbstractYaml Library - Changelog
 
+## v3.0.1
+
+Javadoc for every public class and method. No behaviour changes; plugins on v3.0.0 can upgrade without code changes.
+
+### Documentation
+- Every public and protected class, constructor, method, field and record component has a Javadoc comment, including what happens with missing, mistyped and invalid values, exact validator messages, and the exceptions each method throws. IDEs show them on hover once the sources jar is downloaded.
+- Fixed `SectionBuilder.parent()`, which said it returns a builder on a root section; it throws `IllegalStateException`.
+- Fixed the `ConfigValueContainer` example, which extended a class named `ValueContainer` that does not exist.
+
+### Code
+- `WrapperProcessor`, `ConfigValidator`, `ListValidators` and `YamlWriter` declare their public no-argument constructor explicitly, so it can be documented. Java already generated the same constructor.
+
+### Known issues (documented, not yet fixed)
+- `YAML.saveDefaultConfig` always throws `IllegalArgumentException`: a loaded `FileConfiguration` reports its name as `""`.
+- `YAML.createNewConfig(plugin, path, name)` loads an existing file from the plugin's data folder instead of from `path`.
+- `ValidationResult.combine` treats an invalid result with no messages as valid.
+- A container loaded with `AbstractConfig.loadContainer(...)` does not get its header comment written to a generated file; `loadAllContainers()` does.
+
 ## v3.0.0
 
 All classes moved from `me.mortaldev` to `me.mortaldev.abstractyaml`, so a plugin that shades the library can relocate it without also relocating its own `me.mortaldev.<plugin>` classes. Nothing else changed.
